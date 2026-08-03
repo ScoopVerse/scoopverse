@@ -12,10 +12,10 @@ export const SocialModal: React.FC<Props> = ({ platform, onClose }) => {
   if (!platform) return null;
 
   const isIG = platform === 'instagram';
-  const handle = '@scoopverse';
+  const handle = '@scoopverse.asia';
   const profileUrl = isIG
-    ? 'https://instagram.com/scoopverse'
-    : 'https://tiktok.com/@scoopverse';
+    ? 'https://instagram.com/scoopverse.asia'
+    : 'https://tiktok.com/@scoopverse.asia';
 
   const handleCopy = () => {
     navigator.clipboard.writeText(handle);

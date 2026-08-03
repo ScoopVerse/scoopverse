@@ -10,9 +10,9 @@ interface LogoProps {
 
 export const ScoopVerseLogo: React.FC<LogoProps> = ({ className = '', size = 'md' }) => {
   const sizeClasses = {
-    sm: 'w-36 h-auto',
-    md: 'w-56 sm:w-64 md:w-72 h-auto',
-    lg: 'w-72 sm:w-80 md:w-96 h-auto',
+    sm: 'w-[165px] h-auto',
+    md: 'w-[258px] sm:w-[294px] md:w-[331px] h-auto',
+    lg: 'w-[331px] sm:w-[368px] md:w-[442px] h-auto',
   };
 
   return (
