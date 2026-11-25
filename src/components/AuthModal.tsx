@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { X, Sparkles, LogIn, UserPlus } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { X, Sparkles, LogIn, UserPlus, Eye, EyeOff } from 'lucide-react';
 import type { User } from '../types';
 
 interface Props {
@@ -15,11 +15,18 @@ export const AuthModal: React.FC<Props> = ({ open, onClose, onAuthed }) => {
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+
+  // Password is always masked by default each time the modal opens.
+  useEffect(() => {
+    if (open) setShowPassword(false);
+  }, [open]);
 
   if (!open) return null;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setShowPassword(false);
     setBusy(true);
     setError(null);
     try {
@@ -45,6 +52,7 @@ export const AuthModal: React.FC<Props> = ({ open, onClose, onAuthed }) => {
   const switchMode = (m: 'login' | 'register') => {
     setMode(m);
     setError(null);
+    setShowPassword(false);
   };
 
   const inputClass =
@@ -128,17 +136,28 @@ export const AuthModal: React.FC<Props> = ({ open, onClose, onAuthed }) => {
           </div>
           <div className="space-y-2">
             <label htmlFor="auth-password" className={labelClass}>Password</label>
-            <input
-              id="auth-password"
-              type="password"
-              required
-              minLength={mode === 'register' ? 8 : undefined}
-              autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder={mode === 'register' ? 'At least 8 characters' : '••••••••'}
-              className={inputClass}
-            />
+            <div className="relative">
+              <input
+                id="auth-password"
+                type={showPassword ? 'text' : 'password'}
+                required
+                minLength={mode === 'register' ? 8 : undefined}
+                autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder={mode === 'register' ? 'At least 8 characters' : '••••••••'}
+                className={`${inputClass} pr-12`}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((s) => !s)}
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
+                aria-pressed={showPassword}
+                className="absolute right-2 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full flex items-center justify-center text-[#7b757e] hover:text-[#695282] hover:bg-[#efdbff]/50 transition-all"
+              >
+                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
           </div>
 
           {error && (
