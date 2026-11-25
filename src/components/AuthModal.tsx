@@ -84,8 +84,9 @@ export const AuthModal: React.FC<Props> = ({ open, onClose, onAuthed }) => {
         if (data.retryAfterSeconds) startResendWait(data.retryAfterSeconds);
         setError(data.error ?? 'Something went wrong. Please try again.');
       } else {
+        // Keep the resend link (with its countdown) visible, so resending again
+        // never requires another login attempt.
         startResendWait(data.nextResendInSeconds);
-        setUnverified(false);
         setNotice('A new verification link has been sent. Check your inbox.');
       }
     } catch {
@@ -257,26 +258,27 @@ export const AuthModal: React.FC<Props> = ({ open, onClose, onAuthed }) => {
           </div>
 
           {error && (
-            <div role="alert" className="text-sm text-[#a33a3a] bg-[#fbeaea] border border-[#f1cccc] rounded-xl px-4 py-2.5 space-y-1">
-              <p>{error}</p>
-              {unverified && (
-                <button
-                  type="button"
-                  onClick={() => resend(email)}
-                  disabled={busy || resendWait > 0}
-                  className="font-bold text-[#695282] hover:text-[#533d6b] underline underline-offset-2 disabled:opacity-60 disabled:no-underline disabled:cursor-not-allowed"
-                >
-                  {resendWait > 0
-                    ? `Resend verification email in ${formatCountdown(resendWait)}`
-                    : 'Resend verification email'}
-                </button>
-              )}
-            </div>
+            <p role="alert" className="text-sm text-[#a33a3a] bg-[#fbeaea] border border-[#f1cccc] rounded-xl px-4 py-2.5">
+              {error}
+            </p>
           )}
           {notice && (
             <p role="status" className="text-sm text-[#2f5d50] bg-[#e6f4ef] border border-[#b9e5d8] rounded-xl px-4 py-2.5">
               {notice}
             </p>
+          )}
+          {/* Outside the error box so it stays (with its countdown) after a resend clears the error. */}
+          {unverified && (
+            <button
+              type="button"
+              onClick={() => resend(email)}
+              disabled={busy || resendWait > 0}
+              className="block mx-auto text-sm font-bold text-[#695282] hover:text-[#533d6b] underline underline-offset-2 disabled:opacity-60 disabled:no-underline disabled:cursor-not-allowed"
+            >
+              {resendWait > 0
+                ? `Resend verification email in ${formatCountdown(resendWait)}`
+                : 'Resend verification email'}
+            </button>
           )}
 
           <button

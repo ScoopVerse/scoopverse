@@ -1,7 +1,7 @@
 import { createHash, randomBytes, scrypt, timingSafeEqual } from 'node:crypto';
 import { promisify } from 'node:util';
 import { Router } from 'express';
-import { rateLimit, type AugmentedRequest } from 'express-rate-limit';
+import { rateLimit, type AugmentedRequest, type Options } from 'express-rate-limit';
 import { pool } from './db';
 import { sendAlreadyRegisteredEmail, sendVerificationEmail } from './mailer';
 import { consumeEmailQuota, formatWait } from './emailQuota';
@@ -56,7 +56,12 @@ function sendInBackground(p: Promise<unknown>) {
 }
 
 // Limits are per IP address, kept in memory (reset when the server restarts).
-const limiter = (limit: number, minutes: number, error: string, opts: { skipSuccessfulRequests?: boolean } = {}) =>
+const limiter = (
+  limit: number,
+  minutes: number,
+  error: string,
+  opts: Partial<Pick<Options, 'skipSuccessfulRequests' | 'requestWasSuccessful'>> = {},
+) =>
   rateLimit({
     windowMs: minutes * 60 * 1000,
     limit,
@@ -73,7 +78,12 @@ const limiter = (limit: number, minutes: number, error: string, opts: { skipSucc
 
 // Register and resend are limited by consumeEmailQuota (server/emailQuota.ts) instead.
 // Successful logins don't count, so only failed attempts can lock someone out.
-const loginLimiter = limiter(10, 15, 'Too many login attempts.', { skipSuccessfulRequests: true });
+// "Please verify your email" (403) is only returned for a correct password, so it isn't
+// counted as a failed attempt either.
+const loginLimiter = limiter(10, 15, 'Too many failed login attempts.', {
+  skipSuccessfulRequests: true,
+  requestWasSuccessful: (_req, res) => res.statusCode < 400 || res.statusCode === 403,
+});
 const verifyLimiter = limiter(30, 15, 'Too many verification attempts.');
 
 type UserRow = { id: string; email: string; name: string };
