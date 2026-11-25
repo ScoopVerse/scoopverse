@@ -27,5 +27,18 @@ export async function migrate() {
       expires_at TIMESTAMPTZ NOT NULL
     );
     CREATE INDEX IF NOT EXISTS email_verification_tokens_user_idx ON email_verification_tokens (user_id);
+
+    -- Email-sending limits (see server/emailQuota.ts). "day" is the Singapore calendar day.
+    CREATE TABLE IF NOT EXISTS email_quota_ip (
+      ip    TEXT PRIMARY KEY,
+      day   DATE NOT NULL,
+      count INT NOT NULL DEFAULT 0
+    );
+    CREATE TABLE IF NOT EXISTS email_quota_address (
+      email        TEXT PRIMARY KEY, -- lower-cased
+      day          DATE NOT NULL,
+      resends      INT NOT NULL DEFAULT 0,
+      last_sent_at TIMESTAMPTZ
+    );
   `);
 }

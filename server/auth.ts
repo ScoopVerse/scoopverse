@@ -4,6 +4,7 @@ import { Router } from 'express';
 import { rateLimit, type AugmentedRequest } from 'express-rate-limit';
 import { pool } from './db';
 import { sendAlreadyRegisteredEmail, sendVerificationEmail } from './mailer';
+import { consumeEmailQuota, formatWait } from './emailQuota';
 
 declare module 'express-session' {
   interface SessionData {
@@ -55,13 +56,6 @@ function sendInBackground(p: Promise<unknown>) {
 }
 
 // Limits are per IP address, kept in memory (reset when the server restarts).
-function formatWait(ms: number) {
-  const secs = Math.max(1, Math.ceil(ms / 1000));
-  if (secs < 60) return `${secs} second${secs === 1 ? '' : 's'}`;
-  const mins = Math.ceil(secs / 60);
-  return `${mins} minute${mins === 1 ? '' : 's'}`;
-}
-
 const limiter = (limit: number, minutes: number, error: string, opts: { skipSuccessfulRequests?: boolean } = {}) =>
   rateLimit({
     windowMs: minutes * 60 * 1000,
@@ -71,15 +65,15 @@ const limiter = (limit: number, minutes: number, error: string, opts: { skipSucc
     ...opts,
     handler: (req, res, _next, options) => {
       const resetTime = (req as AugmentedRequest).rateLimit.resetTime;
-      const wait = formatWait(resetTime ? resetTime.getTime() - Date.now() : options.windowMs);
+      const ms = resetTime ? resetTime.getTime() - Date.now() : options.windowMs;
+      const wait = formatWait(Math.max(1, Math.ceil(ms / 1000)));
       res.status(options.statusCode).json({ error: `${error} Please try again in ${wait}.` });
     },
   });
 
-const registerLimiter = limiter(10, 60, 'Too many sign-up attempts.');
+// Register and resend are limited by consumeEmailQuota (server/emailQuota.ts) instead.
 // Successful logins don't count, so only failed attempts can lock someone out.
 const loginLimiter = limiter(10, 15, 'Too many login attempts.', { skipSuccessfulRequests: true });
-const resendLimiter = limiter(5, 15, 'Too many verification emails requested.');
 const verifyLimiter = limiter(30, 15, 'Too many verification attempts.');
 
 type UserRow = { id: string; email: string; name: string };
@@ -100,7 +94,7 @@ export const authRouter = Router();
 
 const CHECK_EMAIL_MESSAGE = 'Check your email for a link to verify your account.';
 
-authRouter.post('/register', registerLimiter, async (req, res) => {
+authRouter.post('/register', async (req, res) => {
   const email = String(req.body?.email ?? '').trim();
   const name = String(req.body?.name ?? '').trim();
   const password = String(req.body?.password ?? '');
@@ -114,6 +108,9 @@ authRouter.post('/register', registerLimiter, async (req, res) => {
   if (password.length < 8 || password.length > 200) {
     return res.status(400).json({ error: 'Password must be at least 8 characters.' });
   }
+
+  const quota = await consumeEmailQuota(req.ip ?? '', email, 'register');
+  if ('error' in quota) return res.status(429).json({ error: quota.error, retryAfterSeconds: quota.retryAfterSeconds });
 
   const passwordHash = await hashPassword(password);
   const inserted = await pool.query<UserRow>(
@@ -143,7 +140,7 @@ authRouter.post('/register', registerLimiter, async (req, res) => {
     }
   }
 
-  res.status(202).json({ message: CHECK_EMAIL_MESSAGE });
+  res.status(202).json({ message: CHECK_EMAIL_MESSAGE, nextResendInSeconds: quota.nextResendInSeconds });
 });
 
 authRouter.post('/verify-email', verifyLimiter, async (req, res) => {
@@ -170,8 +167,15 @@ authRouter.post('/verify-email', verifyLimiter, async (req, res) => {
   res.json({ message: 'Your email is verified. You can now log in.' });
 });
 
-authRouter.post('/resend-verification', resendLimiter, async (req, res) => {
+authRouter.post('/resend-verification', async (req, res) => {
   const email = String(req.body?.email ?? '').trim();
+  if (!EMAIL_RE.test(email) || email.length > 254) {
+    return res.status(400).json({ error: 'Please enter a valid email address.' });
+  }
+
+  const quota = await consumeEmailQuota(req.ip ?? '', email, 'resend');
+  if ('error' in quota) return res.status(429).json({ error: quota.error, retryAfterSeconds: quota.retryAfterSeconds });
+
   const { rows } = await pool.query<UserRow>(
     'SELECT id, email, name FROM users WHERE lower(email) = lower($1) AND email_verified_at IS NULL',
     [email],
@@ -181,7 +185,10 @@ authRouter.post('/resend-verification', resendLimiter, async (req, res) => {
     sendInBackground(sendVerificationEmail(rows[0].email, rows[0].name, token, VERIFY_TTL_SECONDS));
   }
   // Same response whether or not the account exists.
-  res.json({ message: 'If that email has an unverified account, a new verification link is on its way.' });
+  res.json({
+    message: 'If that email has an unverified account, a new verification link is on its way.',
+    nextResendInSeconds: quota.nextResendInSeconds,
+  });
 });
 
 authRouter.post('/login', loginLimiter, async (req, res) => {
