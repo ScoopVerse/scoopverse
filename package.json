@@ -10,7 +10,8 @@
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
     "start": "node server.js",
-    "reset-limits": "tsx server/reset-email-limits.ts"
+    "reset-limits": "tsx server/reset-email-limits.ts",
+    "mail:test": "tsx server/mail-test.ts"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",

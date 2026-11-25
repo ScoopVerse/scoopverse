@@ -70,6 +70,21 @@ export async function sendPasswordResetEmail(to: string, name: string, token: st
   });
 }
 
+// Used by `npm run mail:test`: checks login to the SMTP server, then sends one test email.
+export async function sendTestEmail(to: string) {
+  await transport.verify();
+  return transport.sendMail({
+    from,
+    to,
+    subject: 'ScoopVerse test email',
+    text: `This is a test email from the ScoopVerse website (${appUrl}). If you can read this, sending works.`,
+    html: layout(
+      'Test email',
+      `<p>This is a test email from the ScoopVerse website.</p><p>If you can read this, sending works.</p>`,
+    ),
+  });
+}
+
 // Sent when someone registers with an email that already has a verified account,
 // so the register response can stay identical either way (no account enumeration).
 export async function sendAlreadyRegisteredEmail(to: string, name: string) {
