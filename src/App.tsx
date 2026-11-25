@@ -4,6 +4,7 @@ import { SocialModal } from './components/SocialModal';
 import { AuthButton } from './components/AuthButton';
 import { AuthModal } from './components/AuthModal';
 import { VerifyEmailPage } from './components/VerifyEmailPage';
+import { ResetPasswordPage } from './components/ResetPasswordPage';
 import type { User } from './types';
 
 export default function App() {
@@ -12,6 +13,8 @@ export default function App() {
   const [authOpen, setAuthOpen] = useState(false);
   // The verification email links to /verify-email?token=...
   const [verifying, setVerifying] = useState(() => window.location.pathname === '/verify-email');
+  // The password reset email links to /reset-password?token=...
+  const [resetting, setResetting] = useState(() => window.location.pathname === '/reset-password');
 
   useEffect(() => {
     fetch('/api/auth/me')
@@ -31,6 +34,23 @@ export default function App() {
         onDone={(openLogin) => {
           window.history.pushState(null, '', '/');
           setVerifying(false);
+          setAuthOpen(openLogin);
+        }}
+      />
+    );
+  }
+
+  if (resetting) {
+    return (
+      <ResetPasswordPage
+        onDone={(openLogin) => {
+          window.history.pushState(null, '', '/');
+          setResetting(false);
+          // A successful reset logs the account out everywhere, so refresh who's logged in.
+          fetch('/api/auth/me')
+            .then((r) => (r.ok ? r.json() : { user: null }))
+            .then((d) => setUser(d.user))
+            .catch(() => setUser(null));
           setAuthOpen(openLogin);
         }}
       />

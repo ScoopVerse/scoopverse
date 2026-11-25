@@ -28,6 +28,14 @@ export async function migrate() {
     );
     CREATE INDEX IF NOT EXISTS email_verification_tokens_user_idx ON email_verification_tokens (user_id);
 
+    -- Password reset links: same scheme as verification (only the SHA-256 is stored).
+    CREATE TABLE IF NOT EXISTS password_reset_tokens (
+      token_hash TEXT PRIMARY KEY,
+      user_id    BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      expires_at TIMESTAMPTZ NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS password_reset_tokens_user_idx ON password_reset_tokens (user_id);
+
     -- Email-sending limits (see server/emailQuota.ts). "day" is the Singapore calendar day.
     CREATE TABLE IF NOT EXISTS email_quota_ip (
       ip    TEXT PRIMARY KEY,

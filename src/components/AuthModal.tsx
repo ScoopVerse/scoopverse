@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { X, Sparkles, LogIn, UserPlus, Eye, EyeOff, MailCheck, Send } from 'lucide-react';
 import type { User } from '../types';
 import { formatCountdown, useCountdown } from '../useCountdown';
+import { ForgotPasswordView } from './ForgotPasswordView';
 
 interface Props {
   open: boolean;
@@ -19,6 +20,8 @@ export const AuthModal: React.FC<Props> = ({ open, onClose, onAuthed }) => {
   const [showPassword, setShowPassword] = useState(false);
   // Set after registering: shows the "check your email" view for this address.
   const [checkEmail, setCheckEmail] = useState<string | null>(null);
+  // Shows the "forgot password" view.
+  const [forgot, setForgot] = useState(false);
   // The email whose login was refused because it isn't verified yet (resend goes here).
   const [unverifiedEmail, setUnverifiedEmail] = useState<string | null>(null);
   // Log In stays greyed out after a "please verify" answer until the email or password is edited,
@@ -33,6 +36,7 @@ export const AuthModal: React.FC<Props> = ({ open, onClose, onAuthed }) => {
     if (open) {
       setShowPassword(false);
       setCheckEmail(null);
+      setForgot(false);
       setNotice(null);
       setLoginLocked(false);
     }
@@ -149,11 +153,19 @@ export const AuthModal: React.FC<Props> = ({ open, onClose, onAuthed }) => {
             <span>ScoopVerse Account</span>
           </div>
           <h2 className="font-serif-display text-3xl font-bold text-[#1c1c18]">
-            {checkEmail ? 'Check Your Email' : mode === 'login' ? 'Welcome Back' : 'Join the Verse'}
+            {checkEmail ? 'Check Your Email' : forgot ? 'Reset Password' : mode === 'login' ? 'Welcome Back' : 'Join the Verse'}
           </h2>
         </div>
 
-        {checkEmail ? (
+        {forgot ? (
+          <ForgotPasswordView
+            initialEmail={email}
+            onBack={() => {
+              setForgot(false);
+              switchMode('login');
+            }}
+          />
+        ) : checkEmail ? (
           <div className="text-center space-y-5">
             <div className="w-16 h-16 rounded-full bg-[#efdbff]/70 border border-[#9d84b7]/20 text-[#695282] flex items-center justify-center mx-auto">
               <MailCheck className="w-7 h-7" />
@@ -271,6 +283,20 @@ export const AuthModal: React.FC<Props> = ({ open, onClose, onAuthed }) => {
                 {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
               </button>
             </div>
+            {mode === 'login' && (
+              <button
+                type="button"
+                onClick={() => {
+                  setError(null);
+                  setNotice(null);
+                  setShowPassword(false);
+                  setForgot(true);
+                }}
+                className="block ml-auto text-xs font-semibold text-[#695282] hover:text-[#533d6b]"
+              >
+                Forgot password?
+              </button>
+            )}
           </div>
 
           {error && (

@@ -3,7 +3,7 @@ import { promisify } from 'node:util';
 import { Router } from 'express';
 import { rateLimit, type AugmentedRequest, type Options } from 'express-rate-limit';
 import { pool } from './db';
-import { sendAlreadyRegisteredEmail, sendVerificationEmail } from './mailer';
+import { sendAlreadyRegisteredEmail, sendPasswordResetEmail, sendVerificationEmail } from './mailer';
 import { consumeEmailQuota, formatWait, resendWaitSeconds } from './emailQuota';
 
 declare module 'express-session' {
@@ -38,17 +38,21 @@ const VERIFY_TTL_SECONDS = Number(process.env.VERIFY_TOKEN_TTL_SECONDS ?? 600);
 
 const sha256 = (s: string) => createHash('sha256').update(s).digest('hex');
 
+// How long a password reset link stays valid. Set in .env (default 10 minutes).
+const RESET_TTL_SECONDS = Number(process.env.RESET_TOKEN_TTL_SECONDS ?? 600);
+
 // Creates a fresh single-use token for the user (invalidating older ones) and returns the raw token.
-async function issueVerificationToken(userId: string) {
+async function issueToken(table: 'email_verification_tokens' | 'password_reset_tokens', userId: string, ttl: number) {
   const token = randomBytes(32).toString('base64url');
-  await pool.query('DELETE FROM email_verification_tokens WHERE user_id = $1', [userId]);
+  await pool.query(`DELETE FROM ${table} WHERE user_id = $1`, [userId]);
   await pool.query(
-    `INSERT INTO email_verification_tokens (token_hash, user_id, expires_at)
+    `INSERT INTO ${table} (token_hash, user_id, expires_at)
      VALUES ($1, $2, now() + make_interval(secs => $3))`,
-    [sha256(token), userId, VERIFY_TTL_SECONDS],
+    [sha256(token), userId, ttl],
   );
   return token;
 }
+const issueVerificationToken = (userId: string) => issueToken('email_verification_tokens', userId, VERIFY_TTL_SECONDS);
 
 // Emails are sent after the response so response time doesn't reveal which path ran.
 function sendInBackground(p: Promise<unknown>) {
@@ -85,6 +89,7 @@ const loginLimiter = limiter(10, 15, 'Too many failed login attempts.', {
   requestWasSuccessful: (_req, res) => res.statusCode < 400 || res.statusCode === 403,
 });
 const verifyLimiter = limiter(30, 15, 'Too many verification attempts.');
+const resetLimiter = limiter(30, 15, 'Too many password reset attempts.');
 
 type UserRow = { id: string; email: string; name: string };
 const publicUser = (u: UserRow) => ({ id: u.id, email: u.email, name: u.name });
@@ -225,6 +230,84 @@ authRouter.post('/login', loginLimiter, async (req, res) => {
   }
   await logIn(req, user.id);
   res.json({ user: publicUser(user) });
+});
+
+// --- Password reset ---
+
+authRouter.post('/forgot-password', async (req, res) => {
+  const email = String(req.body?.email ?? '').trim();
+  if (!EMAIL_RE.test(email) || email.length > 254) {
+    return res.status(400).json({ error: 'Please enter a valid email address.' });
+  }
+
+  const quota = await consumeEmailQuota(req.ip ?? '', email, 'reset');
+  if ('error' in quota) return res.status(429).json({ error: quota.error, retryAfterSeconds: quota.retryAfterSeconds });
+
+  const { rows } = await pool.query<UserRow>('SELECT id, email, name FROM users WHERE lower(email) = lower($1)', [email]);
+  if (rows[0]) {
+    const token = await issueToken('password_reset_tokens', rows[0].id, RESET_TTL_SECONDS);
+    sendInBackground(sendPasswordResetEmail(rows[0].email, rows[0].name, token, RESET_TTL_SECONDS));
+  }
+  // Same response whether or not the account exists.
+  res.json({
+    message: "If that email matches an account, we've sent a link to reset your password.",
+    nextResendInSeconds: quota.nextResendInSeconds,
+  });
+});
+
+// Read-only check so the reset page can say "expired" before the user types a new password.
+authRouter.post('/reset-password/check', resetLimiter, async (req, res) => {
+  const token = String(req.body?.token ?? '');
+  const { rows } = await pool.query<{ expired: boolean }>(
+    'SELECT expires_at < now() AS expired FROM password_reset_tokens WHERE token_hash = $1',
+    [sha256(token)],
+  );
+  if (!rows[0]) return res.status(400).json({ code: 'INVALID', error: 'This reset link is invalid or has already been used.' });
+  if (rows[0].expired) return res.status(410).json({ code: 'EXPIRED', error: 'This reset link has expired.' });
+  res.json({ ok: true });
+});
+
+authRouter.post('/reset-password', resetLimiter, async (req, res) => {
+  const token = String(req.body?.token ?? '');
+  const password = String(req.body?.password ?? '');
+  // Check the new password first, so a too-short password doesn't use up the link.
+  if (password.length < 8 || password.length > 200) {
+    return res.status(400).json({ error: 'Password must be at least 8 characters.' });
+  }
+  const passwordHash = await hashPassword(password);
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    // Deleting the row makes the link single-use, even if two requests race.
+    const { rows } = await client.query<{ user_id: string; expired: boolean }>(
+      `DELETE FROM password_reset_tokens WHERE token_hash = $1
+       RETURNING user_id, expires_at < now() AS expired`,
+      [sha256(token)],
+    );
+    const row = rows[0];
+    if (!row || row.expired) {
+      await client.query('COMMIT'); // keep the expired token deleted
+      return row
+        ? res.status(410).json({ code: 'EXPIRED', error: 'This reset link has expired.' })
+        : res.status(400).json({ code: 'INVALID', error: 'This reset link is invalid or has already been used.' });
+    }
+    // Clicking the emailed link proves the user owns the inbox, so the email counts as verified.
+    await client.query(
+      'UPDATE users SET password_hash = $2, email_verified_at = coalesce(email_verified_at, now()) WHERE id = $1',
+      [row.user_id, passwordHash],
+    );
+    await client.query('DELETE FROM password_reset_tokens WHERE user_id = $1', [row.user_id]);
+    // Log the account out everywhere, in case someone else had access.
+    await client.query(`DELETE FROM session WHERE sess->>'userId' = $1`, [row.user_id]);
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw err;
+  } finally {
+    client.release();
+  }
+  res.json({ message: 'Your password has been changed. You can now log in with your new password.' });
 });
 
 authRouter.post('/logout', (req, res, next) => {

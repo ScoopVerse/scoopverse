@@ -51,6 +51,25 @@ export async function sendVerificationEmail(to: string, name: string, token: str
   });
 }
 
+export async function sendPasswordResetEmail(to: string, name: string, token: string, ttlSeconds: number) {
+  const link = `${appUrl}/reset-password?token=${encodeURIComponent(token)}`;
+  const expires = formatDuration(ttlSeconds);
+  await transport.sendMail({
+    from,
+    to,
+    subject: 'Reset your ScoopVerse password',
+    text: `Hi ${name},\n\nWe received a request to reset your ScoopVerse password. Choose a new one here:\n${link}\n\nThis link expires in ${expires} and works once. If you didn't ask for this, ignore this email and your password stays the same.`,
+    html: layout(
+      'Reset your password',
+      `<p>Hi ${escapeHtml(name)},</p>
+       <p>We received a request to reset your ScoopVerse password.</p>
+       ${button(link, 'Choose a new password')}
+       <p style="font-size:13px;color:#4a454e">This link expires in <b>${expires}</b> and works once. If you didn't ask for this, you can ignore this email and your password stays the same.</p>
+       <p style="font-size:12px;color:#7b757e;word-break:break-all">${link}</p>`,
+    ),
+  });
+}
+
 // Sent when someone registers with an email that already has a verified account,
 // so the register response can stay identical either way (no account enumeration).
 export async function sendAlreadyRegisteredEmail(to: string, name: string) {

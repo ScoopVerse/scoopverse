@@ -31,6 +31,13 @@ works once, and requesting a new link invalidates older ones. Unverified account
 log in. Register and resend always return the same message, so they don't reveal which
 emails have accounts.
 
+## Password reset
+
+"Forgot password?" in the login modal emails a single-use link to `/reset-password?token=…`
+(only its SHA-256 is stored; expires after `RESET_TOKEN_TTL_SECONDS`, default 10 min).
+The response is the same whether or not the email has an account. Setting a new password
+logs the account out on every device and marks the email as verified.
+
 ### Limits
 
 Days are Singapore calendar days (reset at midnight Asia/Singapore). Stored in Postgres.
@@ -39,6 +46,8 @@ Days are Singapore calendar days (reset at midnight Asia/Singapore). Stored in P
 - **Per email address:** the registration email is free. Each resend must wait after the
   previous email: 60s, 60s, 5 min, 5 min, 5 min. After 5 resends the address is blocked
   until midnight, from any IP. The schedule starts over the next day.
+- **Password reset emails:** count toward the same IP limit, with their own per-email
+  timer: first request immediate, then 60s, 5 min, 5 min, 5 min, then blocked until midnight.
 - **Login:** 10 failed attempts per IP per 15 min. **Verify link:** 30 per IP per 15 min
   (in memory; reset on server restart).
 
@@ -51,6 +60,9 @@ TEMPORARY for local testing: `npm run reset-limits` clears all email limits.
 | POST   | `/api/auth/register` | `{ name, email, password }` |
 | POST   | `/api/auth/verify-email` | `{ token }`             |
 | POST   | `/api/auth/resend-verification` | `{ email }`      |
+| POST   | `/api/auth/forgot-password` | `{ email }`          |
+| POST   | `/api/auth/reset-password/check` | `{ token }`     |
+| POST   | `/api/auth/reset-password` | `{ token, password }` |
 | POST   | `/api/auth/login`    | `{ email, password }`       |
 | POST   | `/api/auth/logout`   | —                           |
 | GET    | `/api/auth/me`       | — → `{ user \| null }`      |

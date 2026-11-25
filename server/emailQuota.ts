@@ -8,6 +8,10 @@ import { pool } from './db';
  *            previous email: 60s, 60s, 5 min, 5 min, 5 min. After 5 resends that
  *            email is blocked until tomorrow (from any IP).
  *
+ * Password reset emails ('reset') share the IP limit but have their own per-email
+ * timer: the first request is immediate, then 60s, 5 min, 5 min, 5 min, then blocked
+ * until tomorrow.
+ *
  * Tracked by email address whether or not an account exists, so responses never
  * reveal which emails are registered.
  */
@@ -20,8 +24,14 @@ export type QuotaResult =
   | { ok: true; nextResendInSeconds: number }
   | { ok: false; error: string; retryAfterSeconds: number };
 
-export async function consumeEmailQuota(ip: string, rawEmail: string, kind: 'register' | 'resend'): Promise<QuotaResult> {
-  const email = rawEmail.trim().toLowerCase();
+export async function consumeEmailQuota(
+  ip: string,
+  rawEmail: string,
+  kind: 'register' | 'resend' | 'reset',
+): Promise<QuotaResult> {
+  // Reset timers are kept apart from verification timers for the same address.
+  const email = (kind === 'reset' ? 'reset:' : '') + rawEmail.trim().toLowerCase();
+  const noun = kind === 'reset' ? 'password reset emails' : 'verification emails';
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -56,7 +66,7 @@ export async function consumeEmailQuota(ip: string, rawEmail: string, kind: 'reg
     // that follows the resend schedule, including registering the same email again.
     const isInitial = kind === 'register' && addr.is_new;
 
-    const blocked = checkRules(isInitial, addr.resends, sinceLast, ipRow.count, now.until_midnight);
+    const blocked = checkRules(isInitial, addr.resends, sinceLast, ipRow.count, now.until_midnight, noun);
     if (blocked) {
       await client.query('ROLLBACK');
       return { ok: false, ...blocked };
@@ -86,11 +96,12 @@ function checkRules(
   sinceLast: number | null,
   ipCountToday: number,
   untilMidnight: number,
+  noun = 'verification emails',
 ): { error: string; retryAfterSeconds: number } | null {
   if (!isInitial) {
     if (resendsToday >= RESEND_WAITS_SECONDS.length) {
       return {
-        error: "You've reached today's limit of verification emails for this address. Please try again tomorrow.",
+        error: `You've reached today's limit of ${noun} for this address. Please try again tomorrow.`,
         retryAfterSeconds: untilMidnight,
       };
     }
