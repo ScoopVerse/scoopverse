@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Check, Clock, X, Send, Loader2, LogIn, ArrowLeft } from 'lucide-react';
 import { ScoopVerseLogo } from './ScoopVerseLogo';
+import { formatCountdown, useCountdown } from '../useCountdown';
 
 interface Props {
   // Leave this page; openLogin opens the login modal on the landing page.
@@ -14,6 +15,7 @@ export const VerifyEmailPage: React.FC<Props> = ({ onDone }) => {
   const [message, setMessage] = useState('');
   const [email, setEmail] = useState('');
   const [resendState, setResendState] = useState<{ busy: boolean; note: string | null }>({ busy: false, note: null });
+  const [resendWait, startResendWait] = useCountdown();
   const started = useRef(false);
 
   useEffect(() => {
@@ -63,6 +65,7 @@ export const VerifyEmailPage: React.FC<Props> = ({ onDone }) => {
         body: JSON.stringify({ email }),
       });
       const data = await res.json().catch(() => ({}));
+      startResendWait(res.ok ? data.nextResendInSeconds : data.retryAfterSeconds);
       setResendState({ busy: false, note: data.message ?? data.error ?? 'Something went wrong.' });
     } catch {
       setResendState({ busy: false, note: 'Could not reach the server. Please try again.' });
@@ -124,11 +127,17 @@ export const VerifyEmailPage: React.FC<Props> = ({ onDone }) => {
             />
             <button
               type="submit"
-              disabled={resendState.busy}
-              className="w-full py-3.5 rounded-2xl bg-[#695282] hover:bg-[#533d6b] disabled:opacity-60 text-white font-bold text-sm shadow-lg transition-all flex items-center justify-center gap-2"
+              disabled={resendState.busy || resendWait > 0}
+              className="w-full py-3.5 rounded-2xl bg-[#695282] hover:bg-[#533d6b] disabled:opacity-60 disabled:hover:bg-[#695282] disabled:cursor-not-allowed text-white font-bold text-sm shadow-lg transition-all flex items-center justify-center gap-2"
             >
               <Send className="w-4 h-4 text-[#ffd1b3]" />
-              <span>{resendState.busy ? 'PLEASE WAIT…' : 'SEND NEW LINK'}</span>
+              <span>
+                {resendState.busy
+                  ? 'PLEASE WAIT…'
+                  : resendWait > 0
+                    ? `SEND NEW LINK IN ${formatCountdown(resendWait)}`
+                    : 'SEND NEW LINK'}
+              </span>
             </button>
             {resendState.note && (
               <p role="status" className="text-sm text-[#4a454e] bg-[#f7f3ed] border border-[#e6e2dc] rounded-xl px-4 py-2.5">

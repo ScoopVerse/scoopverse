@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { X, Sparkles, LogIn, UserPlus, Eye, EyeOff, MailCheck, Send } from 'lucide-react';
 import type { User } from '../types';
+import { formatCountdown, useCountdown } from '../useCountdown';
 
 interface Props {
   open: boolean;
@@ -21,6 +22,8 @@ export const AuthModal: React.FC<Props> = ({ open, onClose, onAuthed }) => {
   // Set when login was refused because the email isn't verified yet.
   const [unverified, setUnverified] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  // Seconds until the server allows another verification email.
+  const [resendWait, startResendWait] = useCountdown();
 
   // Each time the modal opens: password masked, back to the form.
   useEffect(() => {
@@ -54,6 +57,7 @@ export const AuthModal: React.FC<Props> = ({ open, onClose, onAuthed }) => {
       }
       setPassword('');
       if (mode === 'register') {
+        startResendWait(data.nextResendInSeconds);
         setCheckEmail(email);
       } else {
         onAuthed(data.user);
@@ -76,8 +80,11 @@ export const AuthModal: React.FC<Props> = ({ open, onClose, onAuthed }) => {
         body: JSON.stringify({ email: address }),
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) setError(data.error ?? 'Something went wrong. Please try again.');
-      else {
+      if (!res.ok) {
+        if (data.retryAfterSeconds) startResendWait(data.retryAfterSeconds);
+        setError(data.error ?? 'Something went wrong. Please try again.');
+      } else {
+        startResendWait(data.nextResendInSeconds);
         setUnverified(false);
         setNotice('A new verification link has been sent. Check your inbox.');
       }
@@ -158,11 +165,13 @@ export const AuthModal: React.FC<Props> = ({ open, onClose, onAuthed }) => {
               <button
                 type="button"
                 onClick={() => resend(checkEmail)}
-                disabled={busy}
-                className="w-full py-3 rounded-2xl bg-white border border-[#9d84b7]/40 text-[#695282] hover:bg-[#efdbff]/40 disabled:opacity-60 font-bold text-sm transition-all flex items-center justify-center gap-2"
+                disabled={busy || resendWait > 0}
+                className="w-full py-3 rounded-2xl bg-white border border-[#9d84b7]/40 text-[#695282] hover:bg-[#efdbff]/40 disabled:opacity-60 disabled:hover:bg-white disabled:cursor-not-allowed font-bold text-sm transition-all flex items-center justify-center gap-2"
               >
                 <Send className="w-4 h-4" />
-                <span>{busy ? 'PLEASE WAIT…' : 'RESEND LINK'}</span>
+                <span>
+                  {busy ? 'PLEASE WAIT…' : resendWait > 0 ? `RESEND IN ${formatCountdown(resendWait)}` : 'RESEND LINK'}
+                </span>
               </button>
               <button
                 type="button"
@@ -254,10 +263,12 @@ export const AuthModal: React.FC<Props> = ({ open, onClose, onAuthed }) => {
                 <button
                   type="button"
                   onClick={() => resend(email)}
-                  disabled={busy}
-                  className="font-bold text-[#695282] hover:text-[#533d6b] underline underline-offset-2"
+                  disabled={busy || resendWait > 0}
+                  className="font-bold text-[#695282] hover:text-[#533d6b] underline underline-offset-2 disabled:opacity-60 disabled:no-underline disabled:cursor-not-allowed"
                 >
-                  Resend verification email
+                  {resendWait > 0
+                    ? `Resend verification email in ${formatCountdown(resendWait)}`
+                    : 'Resend verification email'}
                 </button>
               )}
             </div>

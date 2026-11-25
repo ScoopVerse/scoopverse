@@ -29,7 +29,20 @@ Registering sends a one-time link to `/verify-email?token=…`. Only the SHA-256
 token is stored, the link expires after `VERIFY_TOKEN_TTL_SECONDS` (default 600 = 10 min),
 works once, and requesting a new link invalidates older ones. Unverified accounts can't
 log in. Register and resend always return the same message, so they don't reveal which
-emails have accounts. Register, login, resend and verify are rate-limited per IP.
+emails have accounts.
+
+### Limits
+
+Days are Singapore calendar days (reset at midnight Asia/Singapore). Stored in Postgres.
+
+- **Per IP:** 5 verification emails per day (registering and resending both count).
+- **Per email address:** the registration email is free. Each resend must wait after the
+  previous email: 60s, 60s, 5 min, 5 min, 5 min. After 5 resends the address is blocked
+  until midnight, from any IP. The schedule starts over the next day.
+- **Login:** 10 failed attempts per IP per 15 min. **Verify link:** 30 per IP per 15 min
+  (in memory; reset on server restart).
+
+TEMPORARY for local testing: `npm run reset-limits` clears all email limits.
 
 ## API
 
