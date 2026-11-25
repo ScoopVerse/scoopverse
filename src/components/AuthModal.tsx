@@ -19,8 +19,11 @@ export const AuthModal: React.FC<Props> = ({ open, onClose, onAuthed }) => {
   const [showPassword, setShowPassword] = useState(false);
   // Set after registering: shows the "check your email" view for this address.
   const [checkEmail, setCheckEmail] = useState<string | null>(null);
-  // Set when login was refused because the email isn't verified yet.
-  const [unverified, setUnverified] = useState(false);
+  // The email whose login was refused because it isn't verified yet (resend goes here).
+  const [unverifiedEmail, setUnverifiedEmail] = useState<string | null>(null);
+  // Log In stays greyed out after a "please verify" answer until the email or password is edited,
+  // so resubmitting the same details doesn't hit the server again.
+  const [loginLocked, setLoginLocked] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   // Seconds until the server allows another verification email.
   const [resendWait, startResendWait] = useCountdown();
@@ -31,6 +34,7 @@ export const AuthModal: React.FC<Props> = ({ open, onClose, onAuthed }) => {
       setShowPassword(false);
       setCheckEmail(null);
       setNotice(null);
+      setLoginLocked(false);
     }
   }, [open]);
 
@@ -38,11 +42,12 @@ export const AuthModal: React.FC<Props> = ({ open, onClose, onAuthed }) => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (loginLocked) return;
     setShowPassword(false);
     setBusy(true);
     setError(null);
     setNotice(null);
-    setUnverified(false);
+    setUnverifiedEmail(null);
     try {
       const res = await fetch(`/api/auth/${mode}`, {
         method: 'POST',
@@ -51,7 +56,11 @@ export const AuthModal: React.FC<Props> = ({ open, onClose, onAuthed }) => {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setUnverified(data.code === 'EMAIL_NOT_VERIFIED');
+        if (data.code === 'EMAIL_NOT_VERIFIED') {
+          setUnverifiedEmail(email);
+          setLoginLocked(true);
+          startResendWait(data.resendInSeconds); // this email's real countdown from the server
+        }
         setError(data.error ?? 'Something went wrong. Please try again.');
         return;
       }
@@ -100,7 +109,8 @@ export const AuthModal: React.FC<Props> = ({ open, onClose, onAuthed }) => {
     setMode(m);
     setError(null);
     setNotice(null);
-    setUnverified(false);
+    setUnverifiedEmail(null);
+    setLoginLocked(false);
     setShowPassword(false);
   };
 
@@ -226,7 +236,10 @@ export const AuthModal: React.FC<Props> = ({ open, onClose, onAuthed }) => {
               required
               autoComplete="email"
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              onChange={(e) => {
+                setEmail(e.target.value);
+                setLoginLocked(false);
+              }}
               placeholder="enter.your.email@domain.com"
               className={inputClass}
             />
@@ -241,7 +254,10 @@ export const AuthModal: React.FC<Props> = ({ open, onClose, onAuthed }) => {
                 minLength={mode === 'register' ? 8 : undefined}
                 autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                onChange={(e) => {
+                  setPassword(e.target.value);
+                  setLoginLocked(false);
+                }}
                 placeholder={mode === 'register' ? 'At least 8 characters' : '••••••••'}
                 className={`${inputClass} pr-12`}
               />
@@ -268,10 +284,10 @@ export const AuthModal: React.FC<Props> = ({ open, onClose, onAuthed }) => {
             </p>
           )}
           {/* Outside the error box so it stays (with its countdown) after a resend clears the error. */}
-          {unverified && (
+          {unverifiedEmail && (
             <button
               type="button"
-              onClick={() => resend(email)}
+              onClick={() => resend(unverifiedEmail)}
               disabled={busy || resendWait > 0}
               className="block mx-auto text-sm font-bold text-[#695282] hover:text-[#533d6b] underline underline-offset-2 disabled:opacity-60 disabled:no-underline disabled:cursor-not-allowed"
             >
@@ -283,8 +299,12 @@ export const AuthModal: React.FC<Props> = ({ open, onClose, onAuthed }) => {
 
           <button
             type="submit"
-            disabled={busy}
-            className="w-full py-4 rounded-2xl bg-[#695282] hover:bg-[#533d6b] disabled:opacity-60 text-white font-bold text-sm shadow-lg hover:shadow-xl transition-all flex items-center justify-center gap-2"
+            disabled={busy || loginLocked}
+            className={`w-full py-4 rounded-2xl text-white font-bold text-sm transition-all flex items-center justify-center gap-2 ${
+              loginLocked
+                ? 'bg-[#c9c3cc] cursor-not-allowed'
+                : 'bg-[#695282] hover:bg-[#533d6b] disabled:opacity-60 shadow-lg hover:shadow-xl'
+            }`}
           >
             {mode === 'login' ? <LogIn className="w-4 h-4 text-[#ffd1b3]" /> : <UserPlus className="w-4 h-4 text-[#ffd1b3]" />}
             <span>{busy ? 'PLEASE WAIT…' : mode === 'login' ? 'LOG IN' : 'CREATE ACCOUNT'}</span>

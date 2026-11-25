@@ -4,7 +4,7 @@ import { Router } from 'express';
 import { rateLimit, type AugmentedRequest, type Options } from 'express-rate-limit';
 import { pool } from './db';
 import { sendAlreadyRegisteredEmail, sendVerificationEmail } from './mailer';
-import { consumeEmailQuota, formatWait } from './emailQuota';
+import { consumeEmailQuota, formatWait, resendWaitSeconds } from './emailQuota';
 
 declare module 'express-session' {
   interface SessionData {
@@ -216,7 +216,12 @@ authRouter.post('/login', loginLimiter, async (req, res) => {
   }
   // Only revealed after a correct password, so it doesn't leak which emails exist.
   if (!user.email_verified_at) {
-    return res.status(403).json({ code: 'EMAIL_NOT_VERIFIED', error: 'Please verify your email before logging in.' });
+    return res.status(403).json({
+      code: 'EMAIL_NOT_VERIFIED',
+      error: 'Please verify your email before logging in.',
+      // So the UI shows this email's real resend countdown.
+      resendInSeconds: await resendWaitSeconds(req.ip ?? '', user.email),
+    });
   }
   await logIn(req, user.id);
   res.json({ user: publicUser(user) });

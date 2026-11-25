@@ -56,30 +56,10 @@ export async function consumeEmailQuota(ip: string, rawEmail: string, kind: 'reg
     // that follows the resend schedule, including registering the same email again.
     const isInitial = kind === 'register' && addr.is_new;
 
-    if (!isInitial) {
-      if (addr.resends >= RESEND_WAITS_SECONDS.length) {
-        await client.query('ROLLBACK');
-        return {
-          ok: false,
-          error: "You've reached today's limit of verification emails for this address. Please try again tomorrow.",
-          retryAfterSeconds: now.until_midnight,
-        };
-      }
-      const wait = RESEND_WAITS_SECONDS[addr.resends];
-      if (sinceLast !== null && sinceLast < wait) {
-        await client.query('ROLLBACK');
-        const left = Math.ceil(wait - sinceLast);
-        return { ok: false, error: `Please wait ${formatWait(left)} before requesting another email.`, retryAfterSeconds: left };
-      }
-    }
-
-    if (ipRow.count >= IP_DAILY_LIMIT) {
+    const blocked = checkRules(isInitial, addr.resends, sinceLast, ipRow.count, now.until_midnight);
+    if (blocked) {
       await client.query('ROLLBACK');
-      return {
-        ok: false,
-        error: 'Too many emails have been requested from your network today. Please try again tomorrow.',
-        retryAfterSeconds: now.until_midnight,
-      };
+      return { ok: false, ...blocked };
     }
 
     await client.query('UPDATE email_quota_ip SET count = count + 1 WHERE ip = $1', [ip]);
@@ -97,6 +77,56 @@ export async function consumeEmailQuota(ip: string, rawEmail: string, kind: 'reg
   } finally {
     client.release();
   }
+}
+
+// The limit rules, shared by consumeEmailQuota and resendWaitSeconds. Returns null if allowed.
+function checkRules(
+  isInitial: boolean,
+  resendsToday: number,
+  sinceLast: number | null,
+  ipCountToday: number,
+  untilMidnight: number,
+): { error: string; retryAfterSeconds: number } | null {
+  if (!isInitial) {
+    if (resendsToday >= RESEND_WAITS_SECONDS.length) {
+      return {
+        error: "You've reached today's limit of verification emails for this address. Please try again tomorrow.",
+        retryAfterSeconds: untilMidnight,
+      };
+    }
+    const wait = RESEND_WAITS_SECONDS[resendsToday];
+    if (sinceLast !== null && sinceLast < wait) {
+      const left = Math.ceil(wait - sinceLast);
+      return { error: `Please wait ${formatWait(left)} before requesting another email.`, retryAfterSeconds: left };
+    }
+  }
+  if (ipCountToday >= IP_DAILY_LIMIT) {
+    return {
+      error: 'Too many emails have been requested from your network today. Please try again tomorrow.',
+      retryAfterSeconds: untilMidnight,
+    };
+  }
+  return null;
+}
+
+// Read-only: seconds until this IP may request a resend for this email (0 = allowed now).
+// Changes nothing; used to show the right countdown without sending anything.
+export async function resendWaitSeconds(ip: string, rawEmail: string): Promise<number> {
+  const { rows: [r] } = await pool.query<{
+    until_midnight: number;
+    ip_count: number;
+    resends: number;
+    since_last: number | null;
+  }>(
+    `WITH t AS (SELECT (now() AT TIME ZONE $1)::date AS today)
+     SELECT ceil(extract(epoch FROM (date_trunc('day', now() AT TIME ZONE $1) + interval '1 day') - (now() AT TIME ZONE $1)))::int AS until_midnight,
+            coalesce((SELECT count FROM email_quota_ip, t WHERE ip = $2 AND day = t.today), 0) AS ip_count,
+            coalesce((SELECT resends FROM email_quota_address, t WHERE email = $3 AND day = t.today), 0) AS resends,
+            (SELECT extract(epoch FROM now() - last_sent_at)::float FROM email_quota_address WHERE email = $3) AS since_last`,
+    [TZ, ip, rawEmail.trim().toLowerCase()],
+  );
+  const blocked = checkRules(false, r.resends, r.since_last, r.ip_count, r.until_midnight);
+  return blocked ? blocked.retryAfterSeconds : 0;
 }
 
 export function formatWait(secs: number) {
