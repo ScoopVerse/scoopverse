@@ -17,15 +17,27 @@ Prerequisites: Node.js 22+, PostgreSQL 14+.
    ```
 2. `cp .env.example .env` and fill in `DATABASE_URL` and `SESSION_SECRET`.
 3. `npm install`
-4. `npm run dev` → http://localhost:3000
+4. Start [Mailpit](https://mailpit.axllent.org/) (local test inbox):
+   `mailpit --listen 127.0.0.1:8025 --smtp 127.0.0.1:1025` → inbox at http://localhost:8025
+5. `npm run dev` → http://localhost:3000
 
-Tables (`users`, `session`) are created automatically on startup.
+Tables (`users`, `session`, `email_verification_tokens`) are created automatically on startup.
+
+## Email verification
+
+Registering sends a one-time link to `/verify-email?token=…`. Only the SHA-256 of the
+token is stored, the link expires after `VERIFY_TOKEN_TTL_SECONDS` (default 600 = 10 min),
+works once, and requesting a new link invalidates older ones. Unverified accounts can't
+log in. Register and resend always return the same message, so they don't reveal which
+emails have accounts. Register, login, resend and verify are rate-limited per IP.
 
 ## API
 
 | Method | Path                 | Body                        |
 | ------ | -------------------- | --------------------------- |
 | POST   | `/api/auth/register` | `{ name, email, password }` |
+| POST   | `/api/auth/verify-email` | `{ token }`             |
+| POST   | `/api/auth/resend-verification` | `{ email }`      |
 | POST   | `/api/auth/login`    | `{ email, password }`       |
 | POST   | `/api/auth/logout`   | —                           |
 | GET    | `/api/auth/me`       | — → `{ user \| null }`      |

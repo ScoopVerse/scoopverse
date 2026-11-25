@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { X, Sparkles, LogIn, UserPlus, Eye, EyeOff } from 'lucide-react';
+import { X, Sparkles, LogIn, UserPlus, Eye, EyeOff, MailCheck, Send } from 'lucide-react';
 import type { User } from '../types';
 
 interface Props {
@@ -16,10 +16,19 @@ export const AuthModal: React.FC<Props> = ({ open, onClose, onAuthed }) => {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  // Set after registering: shows the "check your email" view for this address.
+  const [checkEmail, setCheckEmail] = useState<string | null>(null);
+  // Set when login was refused because the email isn't verified yet.
+  const [unverified, setUnverified] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
 
-  // Password is always masked by default each time the modal opens.
+  // Each time the modal opens: password masked, back to the form.
   useEffect(() => {
-    if (open) setShowPassword(false);
+    if (open) {
+      setShowPassword(false);
+      setCheckEmail(null);
+      setNotice(null);
+    }
   }, [open]);
 
   if (!open) return null;
@@ -29,6 +38,8 @@ export const AuthModal: React.FC<Props> = ({ open, onClose, onAuthed }) => {
     setShowPassword(false);
     setBusy(true);
     setError(null);
+    setNotice(null);
+    setUnverified(false);
     try {
       const res = await fetch(`/api/auth/${mode}`, {
         method: 'POST',
@@ -37,11 +48,39 @@ export const AuthModal: React.FC<Props> = ({ open, onClose, onAuthed }) => {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
+        setUnverified(data.code === 'EMAIL_NOT_VERIFIED');
         setError(data.error ?? 'Something went wrong. Please try again.');
         return;
       }
       setPassword('');
-      onAuthed(data.user);
+      if (mode === 'register') {
+        setCheckEmail(email);
+      } else {
+        onAuthed(data.user);
+      }
+    } catch {
+      setError('Could not reach the server. Please try again.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const resend = async (address: string) => {
+    setBusy(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const res = await fetch('/api/auth/resend-verification', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: address }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) setError(data.error ?? 'Something went wrong. Please try again.');
+      else {
+        setUnverified(false);
+        setNotice('A new verification link has been sent. Check your inbox.');
+      }
     } catch {
       setError('Could not reach the server. Please try again.');
     } finally {
@@ -52,7 +91,14 @@ export const AuthModal: React.FC<Props> = ({ open, onClose, onAuthed }) => {
   const switchMode = (m: 'login' | 'register') => {
     setMode(m);
     setError(null);
+    setNotice(null);
+    setUnverified(false);
     setShowPassword(false);
+  };
+
+  const backToLogin = () => {
+    setCheckEmail(null);
+    switchMode('login');
   };
 
   const inputClass =
@@ -85,10 +131,51 @@ export const AuthModal: React.FC<Props> = ({ open, onClose, onAuthed }) => {
             <span>ScoopVerse Account</span>
           </div>
           <h2 className="font-serif-display text-3xl font-bold text-[#1c1c18]">
-            {mode === 'login' ? 'Welcome Back' : 'Join the Verse'}
+            {checkEmail ? 'Check Your Email' : mode === 'login' ? 'Welcome Back' : 'Join the Verse'}
           </h2>
         </div>
 
+        {checkEmail ? (
+          <div className="text-center space-y-5">
+            <div className="w-16 h-16 rounded-full bg-[#efdbff]/70 border border-[#9d84b7]/20 text-[#695282] flex items-center justify-center mx-auto">
+              <MailCheck className="w-7 h-7" />
+            </div>
+            <p className="text-sm text-[#4a454e] leading-relaxed">
+              We sent a verification link to <span className="font-bold text-[#695282] break-all">{checkEmail}</span>.
+              Click it to activate your account, then log in.
+            </p>
+            {notice && (
+              <p role="status" className="text-sm text-[#2f5d50] bg-[#e6f4ef] border border-[#b9e5d8] rounded-xl px-4 py-2.5">
+                {notice}
+              </p>
+            )}
+            {error && (
+              <p role="alert" className="text-sm text-[#a33a3a] bg-[#fbeaea] border border-[#f1cccc] rounded-xl px-4 py-2.5">
+                {error}
+              </p>
+            )}
+            <div className="flex flex-col gap-2">
+              <button
+                type="button"
+                onClick={() => resend(checkEmail)}
+                disabled={busy}
+                className="w-full py-3 rounded-2xl bg-white border border-[#9d84b7]/40 text-[#695282] hover:bg-[#efdbff]/40 disabled:opacity-60 font-bold text-sm transition-all flex items-center justify-center gap-2"
+              >
+                <Send className="w-4 h-4" />
+                <span>{busy ? 'PLEASE WAIT…' : 'RESEND LINK'}</span>
+              </button>
+              <button
+                type="button"
+                onClick={backToLogin}
+                className="w-full py-3 rounded-2xl bg-[#695282] hover:bg-[#533d6b] text-white font-bold text-sm shadow-lg transition-all flex items-center justify-center gap-2"
+              >
+                <LogIn className="w-4 h-4 text-[#ffd1b3]" />
+                <span>BACK TO LOG IN</span>
+              </button>
+            </div>
+          </div>
+        ) : (
+        <>
         {/* Mode toggle */}
         <div className="grid grid-cols-2 gap-1 p-1 rounded-full bg-[#f7f3ed] border border-[#e6e2dc] text-xs font-bold uppercase tracking-wider">
           {(['login', 'register'] as const).map((m) => (
@@ -161,8 +248,23 @@ export const AuthModal: React.FC<Props> = ({ open, onClose, onAuthed }) => {
           </div>
 
           {error && (
-            <p role="alert" className="text-sm text-[#a33a3a] bg-[#fbeaea] border border-[#f1cccc] rounded-xl px-4 py-2.5">
-              {error}
+            <div role="alert" className="text-sm text-[#a33a3a] bg-[#fbeaea] border border-[#f1cccc] rounded-xl px-4 py-2.5 space-y-1">
+              <p>{error}</p>
+              {unverified && (
+                <button
+                  type="button"
+                  onClick={() => resend(email)}
+                  disabled={busy}
+                  className="font-bold text-[#695282] hover:text-[#533d6b] underline underline-offset-2"
+                >
+                  Resend verification email
+                </button>
+              )}
+            </div>
+          )}
+          {notice && (
+            <p role="status" className="text-sm text-[#2f5d50] bg-[#e6f4ef] border border-[#b9e5d8] rounded-xl px-4 py-2.5">
+              {notice}
             </p>
           )}
 
@@ -175,6 +277,8 @@ export const AuthModal: React.FC<Props> = ({ open, onClose, onAuthed }) => {
             <span>{busy ? 'PLEASE WAIT…' : mode === 'login' ? 'LOG IN' : 'CREATE ACCOUNT'}</span>
           </button>
         </form>
+        </>
+        )}
       </div>
     </div>
   );
