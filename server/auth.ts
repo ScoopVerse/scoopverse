@@ -1,7 +1,7 @@
 import { createHash, randomBytes, scrypt, timingSafeEqual } from 'node:crypto';
 import { promisify } from 'node:util';
 import { Router } from 'express';
-import { rateLimit } from 'express-rate-limit';
+import { rateLimit, type AugmentedRequest } from 'express-rate-limit';
 import { pool } from './db';
 import { sendAlreadyRegisteredEmail, sendVerificationEmail } from './mailer';
 
@@ -54,19 +54,38 @@ function sendInBackground(p: Promise<unknown>) {
   p.catch((err) => console.error('Email send failed:', err));
 }
 
-const limiter = (limit: number, minutes: number, error: string) =>
+// Limits are per IP address, kept in memory (reset when the server restarts).
+// Set RATE_LIMIT=off in .env to disable them while testing locally.
+const rateLimitOff = process.env.RATE_LIMIT === 'off';
+if (rateLimitOff) console.warn('Rate limiting is OFF (RATE_LIMIT=off). Never use this in production.');
+
+function formatWait(ms: number) {
+  const secs = Math.max(1, Math.ceil(ms / 1000));
+  if (secs < 60) return `${secs} second${secs === 1 ? '' : 's'}`;
+  const mins = Math.ceil(secs / 60);
+  return `${mins} minute${mins === 1 ? '' : 's'}`;
+}
+
+const limiter = (limit: number, minutes: number, error: string, opts: { skipSuccessfulRequests?: boolean } = {}) =>
   rateLimit({
     windowMs: minutes * 60 * 1000,
     limit,
     standardHeaders: 'draft-8',
     legacyHeaders: false,
-    message: { error },
+    skip: () => rateLimitOff,
+    ...opts,
+    handler: (req, res, _next, options) => {
+      const resetTime = (req as AugmentedRequest).rateLimit.resetTime;
+      const wait = formatWait(resetTime ? resetTime.getTime() - Date.now() : options.windowMs);
+      res.status(options.statusCode).json({ error: `${error} Please try again in ${wait}.` });
+    },
   });
 
-const registerLimiter = limiter(10, 60, 'Too many sign-up attempts. Please try again later.');
-const loginLimiter = limiter(10, 15, 'Too many login attempts. Please wait a few minutes and try again.');
-const resendLimiter = limiter(5, 15, 'Too many requests. Please wait a few minutes and try again.');
-const verifyLimiter = limiter(30, 15, 'Too many requests. Please wait a few minutes and try again.');
+const registerLimiter = limiter(10, 60, 'Too many sign-up attempts.');
+// Successful logins don't count, so only failed attempts can lock someone out.
+const loginLimiter = limiter(10, 15, 'Too many login attempts.', { skipSuccessfulRequests: true });
+const resendLimiter = limiter(5, 15, 'Too many verification emails requested.');
+const verifyLimiter = limiter(30, 15, 'Too many verification attempts.');
 
 type UserRow = { id: string; email: string; name: string };
 const publicUser = (u: UserRow) => ({ id: u.id, email: u.email, name: u.name });
