@@ -1,5 +1,11 @@
 export type ActiveView = 'main' | 'simulator' | 'roadmap' | 'vip';
 
+export interface User {
+  id: string;
+  email: string;
+  name: string;
+}
+
 export type DeviceViewport = 'responsive' | 'desktop' | 'tablet' | 'mobile';
 
 export interface ScentNote {

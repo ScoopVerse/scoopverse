@@ -1,20 +1,46 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://ai.google.dev/static/site-assets/images/share-ais-513315318.png" />
-</div>
+# ScoopVerse
 
-# Run and deploy your AI Studio app
+Mystery fragrance scoops — landing site with user accounts.
 
-This contains everything you need to run your app locally.
+**Stack:** React 19 + Vite 6 + Tailwind 4 (frontend), Express 5 + TypeScript (backend),
+PostgreSQL (users + server-side sessions via `express-session` / `connect-pg-simple`).
+One Node process serves both the site and the `/api` routes.
 
-View your app in AI Studio: https://ai.studio/apps/bc479972-2312-4272-ac84-988b02f19bbb
+## Run locally
 
-## Run Locally
+Prerequisites: Node.js 22+, PostgreSQL 14+.
 
-**Prerequisites:**  Node.js
+1. Create a database and user:
+   ```sql
+   CREATE USER scoopverse WITH PASSWORD 'choose-a-password';
+   CREATE DATABASE scoopverse OWNER scoopverse;
+   ```
+2. `cp .env.example .env` and fill in `DATABASE_URL` and `SESSION_SECRET`.
+3. `npm install`
+4. `npm run dev` → http://localhost:3000
 
+Tables (`users`, `session`) are created automatically on startup.
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+## API
+
+| Method | Path                 | Body                        |
+| ------ | -------------------- | --------------------------- |
+| POST   | `/api/auth/register` | `{ name, email, password }` |
+| POST   | `/api/auth/login`    | `{ email, password }`       |
+| POST   | `/api/auth/logout`   | —                           |
+| GET    | `/api/auth/me`       | — → `{ user \| null }`      |
+
+Passwords are hashed with scrypt. Sessions live in Postgres and are referenced by an
+`httpOnly`, `SameSite=Lax` cookie (`sv.sid`), `Secure` in production.
+
+## Deploy (dedicated server)
+
+```sh
+npm ci
+npm run build                     # builds dist/ and server.js
+NODE_ENV=production npm start     # or set NODE_ENV in .env
+```
+
+Run it behind nginx (or similar) terminating HTTPS and proxying to `PORT`,
+and keep it alive with systemd or pm2. `NODE_ENV=production` is required so cookies
+are marked `Secure` and the proxy's `X-Forwarded-*` headers are trusted.
