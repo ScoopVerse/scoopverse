@@ -55,10 +55,6 @@ function sendInBackground(p: Promise<unknown>) {
 }
 
 // Limits are per IP address, kept in memory (reset when the server restarts).
-// Set RATE_LIMIT=off in .env to disable them while testing locally.
-const rateLimitOff = process.env.RATE_LIMIT === 'off';
-if (rateLimitOff) console.warn('Rate limiting is OFF (RATE_LIMIT=off). Never use this in production.');
-
 function formatWait(ms: number) {
   const secs = Math.max(1, Math.ceil(ms / 1000));
   if (secs < 60) return `${secs} second${secs === 1 ? '' : 's'}`;
@@ -72,7 +68,6 @@ const limiter = (limit: number, minutes: number, error: string, opts: { skipSucc
     limit,
     standardHeaders: 'draft-8',
     legacyHeaders: false,
-    skip: () => rateLimitOff,
     ...opts,
     handler: (req, res, _next, options) => {
       const resetTime = (req as AugmentedRequest).rateLimit.resetTime;
