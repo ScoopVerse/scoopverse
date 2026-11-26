@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from 'node:crypto';
-import argon2 from 'argon2';
 import { Router } from 'express';
+import { dummyHash, hashPassword, verifyPassword } from './passwords';
 import { rateLimit, type AugmentedRequest, type Options } from 'express-rate-limit';
 import { pool } from './db';
 import { sendAlreadyRegisteredEmail, sendPasswordResetEmail, sendVerificationEmail } from './mailer';
@@ -12,22 +12,7 @@ declare module 'express-session' {
   }
 }
 
-// Argon2id with the library defaults (64 MiB memory, 3 passes, 4 lanes); salt is random per hash.
-function hashPassword(password: string) {
-  return argon2.hash(password, { type: argon2.argon2id });
-}
-
-async function verifyPassword(password: string, stored: string) {
-  // Accounts created before the switch from scrypt can't log in; they can use "Forgot password?".
-  if (!stored.startsWith('$argon2id$')) return false;
-  return argon2.verify(stored, password);
-}
-
-// Hash of a random password, compared against when the email doesn't exist
-// so login takes the same time either way (no account enumeration by timing).
-const dummyHash = hashPassword(randomBytes(16).toString('hex'));
-
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+export const EMAIL_RE =/^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 // How long a verification link stays valid. Set in .env (default 10 minutes).
 const VERIFY_TTL_SECONDS = Number(process.env.VERIFY_TOKEN_TTL_SECONDS ?? 600);
@@ -56,7 +41,7 @@ function sendInBackground(p: Promise<unknown>) {
 }
 
 // Limits are per IP address, kept in memory (reset when the server restarts).
-const limiter = (
+export const limiter = (
   limit: number,
   minutes: number,
   error: string,
@@ -250,6 +235,12 @@ authRouter.post('/forgot-password', async (req, res) => {
     nextResendInSeconds: quota.nextResendInSeconds,
   });
 });
+
+// Used by the admin dashboard's batch "send password reset". Waits for the email to be sent.
+export async function sendPasswordResetTo(user: UserRow) {
+  const token = await issueToken('password_reset_tokens', user.id, RESET_TTL_SECONDS);
+  await sendPasswordResetEmail(user.email, user.name, token, RESET_TTL_SECONDS);
+}
 
 // Read-only check so the reset page can say "expired" before the user types a new password.
 authRouter.post('/reset-password/check', resetLimiter, async (req, res) => {

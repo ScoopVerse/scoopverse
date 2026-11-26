@@ -48,5 +48,31 @@ export async function migrate() {
       resends      INT NOT NULL DEFAULT 0,
       last_sent_at TIMESTAMPTZ
     );
+
+    -- Admin accounts, separate from customers. Created only from the terminal (server/admin-cli.ts).
+    CREATE TABLE IF NOT EXISTS admins (
+      id            BIGSERIAL PRIMARY KEY,
+      email         TEXT NOT NULL,
+      name          TEXT NOT NULL,
+      password_hash TEXT NOT NULL,
+      created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+      last_login_at TIMESTAMPTZ
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS admins_email_lower_idx ON admins (lower(email));
+
+    -- Prices are whole cents (SGD). "image" is a file name inside uploads/products/.
+    CREATE TABLE IF NOT EXISTS products (
+      id          BIGSERIAL PRIMARY KEY,
+      name        TEXT NOT NULL,
+      description TEXT NOT NULL DEFAULT '',
+      price_cents INT NOT NULL CHECK (price_cents > 0),
+      stock       INT NOT NULL DEFAULT 0 CHECK (stock >= 0),
+      image       TEXT,
+      active      BOOLEAN NOT NULL DEFAULT true,
+      created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+    -- The full uploaded photo (file name in uploads/originals/, never public) and the crop applied to it, in percent.
+    ALTER TABLE products ADD COLUMN IF NOT EXISTS image_original TEXT;
+    ALTER TABLE products ADD COLUMN IF NOT EXISTS image_crop JSONB;
   `);
 }

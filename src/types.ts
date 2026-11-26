@@ -6,6 +6,43 @@ export interface User {
   name: string;
 }
 
+export interface Admin {
+  id: string;
+  email: string;
+  name: string;
+}
+
+// What the public shop sees.
+export interface Product {
+  id: string;
+  name: string;
+  description: string;
+  priceCents: number;
+  inStock: boolean;
+  imageUrl: string | null;
+}
+
+// The cropped part of a picture, in percent of the full picture.
+export interface CropArea {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+// What the admin sees: also the stock count, whether it's visible in the shop, and the saved crop.
+export interface AdminProduct {
+  id: string;
+  name: string;
+  description: string;
+  priceCents: number;
+  stock: number;
+  active: boolean;
+  imageUrl: string | null;
+  hasOriginal: boolean; // the full photo is saved on the server (admin can re-crop it)
+  crop: CropArea | null;
+}
+
 export type DeviceViewport = 'responsive' | 'desktop' | 'tablet' | 'mobile';
 
 export interface ScentNote {

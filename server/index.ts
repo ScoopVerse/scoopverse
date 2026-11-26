@@ -5,6 +5,8 @@ import session from 'express-session';
 import connectPgSimple from 'connect-pg-simple';
 import { pool, migrate } from './db';
 import { authRouter } from './auth';
+import { adminRouter } from './admin';
+import { productsPublicRouter, PRODUCT_DIR } from './products';
 
 const isProd = process.env.NODE_ENV === 'production';
 const port = Number(process.env.PORT ?? 3000);
@@ -20,6 +22,36 @@ const app = express();
 if (isProd) app.set('trust proxy', 1);
 
 app.use(express.json({ limit: '10kb' }));
+
+// CSRF guard: state-changing API calls must be JSON. Cross-site HTML forms
+// can't send application/json without a CORS preflight, which we never allow.
+app.use('/api', (req, res, next) => {
+  // image/* is only read by the admin product image upload; cross-site pages can't send it without a CORS preflight.
+  if (req.method !== 'GET' && req.method !== 'HEAD' && req.headers['content-type'] && !req.is(['application/json', 'image/*'])) {
+    return res.status(415).json({ error: 'Expected application/json' });
+  }
+  next();
+});
+
+// Mounted before the customer session: the admin API has its own session cookie.
+app.use('/api/admin', adminRouter);
+
+// Keep the admin page (and the shop, until it launches: remove '/shop' then) out of search engines.
+app.use(['/admin', '/shop'], (_req, res, next) => {
+  res.set('X-Robots-Tag', 'noindex, nofollow');
+  next();
+});
+
+// Product photos: always WebP made by the server, random names, so they can be cached for good.
+app.use(
+  '/uploads/products',
+  express.static(PRODUCT_DIR, {
+    index: false,
+    maxAge: '30d',
+    immutable: true,
+    setHeaders: (res) => res.set('X-Content-Type-Options', 'nosniff'),
+  }),
+);
 
 const PgStore = connectPgSimple(session);
 app.use(
@@ -38,16 +70,8 @@ app.use(
   }),
 );
 
-// CSRF guard: state-changing API calls must be JSON. Cross-site HTML forms
-// can't send application/json without a CORS preflight, which we never allow.
-app.use('/api', (req, res, next) => {
-  if (req.method !== 'GET' && req.method !== 'HEAD' && req.headers['content-type'] && !req.is('application/json')) {
-    return res.status(415).json({ error: 'Expected application/json' });
-  }
-  next();
-});
-
 app.use('/api/auth', authRouter);
+app.use('/api/products', productsPublicRouter);
 app.use('/api', (_req, res) => res.status(404).json({ error: 'Not found' }));
 
 if (isProd) {
@@ -56,7 +80,12 @@ if (isProd) {
   app.get('/{*splat}', (_req, res) => res.sendFile(path.join(dist, 'index.html')));
 } else {
   const { createServer } = await import('vite');
-  const vite = await createServer({ server: { middlewareMode: true }, appType: 'spa' });
+  // Vite serves any file under the project folder; keep the private original photos out of that
+  // (the list below is Vite's default deny list plus uploads/originals).
+  const vite = await createServer({
+    server: { middlewareMode: true, fs: { deny: ['.env', '.env.*', '*.{crt,pem}', '**/.git/**', '**/uploads/originals/**'] } },
+    appType: 'spa',
+  });
   app.use(vite.middlewares);
 }
 
