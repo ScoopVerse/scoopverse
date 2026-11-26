@@ -1,5 +1,5 @@
-import { createHash, randomBytes, scrypt, timingSafeEqual } from 'node:crypto';
-import { promisify } from 'node:util';
+import { createHash, randomBytes } from 'node:crypto';
+import argon2 from 'argon2';
 import { Router } from 'express';
 import { rateLimit, type AugmentedRequest, type Options } from 'express-rate-limit';
 import { pool } from './db';
@@ -12,19 +12,15 @@ declare module 'express-session' {
   }
 }
 
-const scryptAsync = promisify(scrypt) as (pw: string, salt: Buffer, len: number) => Promise<Buffer>;
-
-async function hashPassword(password: string) {
-  const salt = randomBytes(16);
-  const hash = await scryptAsync(password, salt, 64);
-  return `scrypt$${salt.toString('base64')}$${hash.toString('base64')}`;
+// Argon2id with the library defaults (64 MiB memory, 3 passes, 4 lanes); salt is random per hash.
+function hashPassword(password: string) {
+  return argon2.hash(password, { type: argon2.argon2id });
 }
 
 async function verifyPassword(password: string, stored: string) {
-  const [, saltB64, hashB64] = stored.split('$');
-  const expected = Buffer.from(hashB64, 'base64');
-  const actual = await scryptAsync(password, Buffer.from(saltB64, 'base64'), expected.length);
-  return timingSafeEqual(actual, expected);
+  // Accounts created before the switch from scrypt can't log in; they can use "Forgot password?".
+  if (!stored.startsWith('$argon2id$')) return false;
+  return argon2.verify(stored, password);
 }
 
 // Hash of a random password, compared against when the email doesn't exist

@@ -67,7 +67,7 @@ TEMPORARY for local testing: `npm run reset-limits` clears all email limits.
 | POST   | `/api/auth/logout`   | —                           |
 | GET    | `/api/auth/me`       | — → `{ user \| null }`      |
 
-Passwords are hashed with scrypt. Sessions live in Postgres and are referenced by an
+Passwords are hashed with Argon2id. Sessions live in Postgres and are referenced by an
 `httpOnly`, `SameSite=Lax` cookie (`sv.sid`), `Secure` in production.
 
 ## Deploy (dedicated server)
