@@ -101,10 +101,10 @@ What NextGen gives us:
 - Limits are generous for us (hundreds of requests a minute).
 
 **VERIFY before building the EasyParcel part (the docs are Malaysia-focused):**
-1. Does the NextGen sandbox/live work for a **Singapore** account, and which Singapore couriers
-   and service IDs appear? Every example in the docs is Malaysia.
-2. The sandbox web address for Singapore is given two ways (`.my` and `.sg` hosts) in different
-   places. Ask EasyParcel support which is right.
+1. Which Malaysian couriers and service IDs appear in the NextGen sandbox/live for our account?
+   (Customers are in Malaysia for now; every example in the docs is Malaysia too.)
+2. The sandbox web address is given two ways (`.my` and `.sg` hosts) in different
+   places. Ask EasyParcel support which is right (we need the Malaysia one).
 3. **Are perfumes allowed?** Fragrances (alcohol, sometimes aerosols) are often restricted by
    couriers, especially by air. Check the prohibited-items rules of the couriers you plan to
    use *before* investing in this. Mystery "scoops" may be a different form, but confirm.
@@ -131,7 +131,7 @@ Each phase ends with something you can click and test, and is safe on its own.
 - `addresses` table per customer: name, phone, street, unit, postcode, one marked default.
 - Customers list "Phone Number" and "Address Book" placeholders get real data. The phone shown
   is the default (first) address's phone, as you described.
-- Singapore address format: block/street, unit, 6-digit postcode.
+- Malaysian address format: street/unit, area, city, state, 5-digit postcode (customers are in Malaysia for now).
 
 **Phase 4: Orders + HitPay (sandbox)**
 - `orders` + `order_items` tables. Item names and prices are **copied** into the order, so
@@ -160,7 +160,7 @@ Each phase ends with something you can click and test, and is safe on its own.
 | Option | Good | Bad |
 |---|---|---|
 | **Flat fee or free over $X** (recommended first) | Simple, predictable, works now | You may lose or gain a little per parcel |
-| Live courier price at checkout | Exact | Needs weight and size on every product, and Singapore couriers confirmed; adds waiting time at checkout |
+| Live courier price at checkout | Exact | Needs weight and size on every product, and Malaysian couriers confirmed; adds waiting time at checkout |
 
 Recommendation: start with a flat fee. The real EasyParcel price is still shown to you when you
 confirm the shipment, so you can see your margin. Switch to live prices later if needed.

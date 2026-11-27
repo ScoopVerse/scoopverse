@@ -21,7 +21,7 @@ Prerequisites: Node.js 22+, PostgreSQL 14+.
    `mailpit --listen 127.0.0.1:8025 --smtp 127.0.0.1:1025` → inbox at http://localhost:8025
 5. `npm run dev` → http://localhost:3000
 
-Tables (`users`, `session`, `email_verification_tokens`) are created automatically on startup.
+Tables (`users`, `session`, `email_verification_tokens`, products, carts, …) are created automatically on startup.
 
 ## Email verification
 
@@ -89,6 +89,17 @@ Cropping again replaces the shop picture; the crop settings are saved so the cro
 are WebP with random names. `products.image` mirrors the cover so the shop's list needs no join. `uploads/` is not in Git: **include it in server backups** and keep it on the
 same disk when deploying (`npm run build` does not touch it).
 
+## Cart
+
+A customer's cart lives in the database (`cart_items`), so it follows them across devices. Only logged-in customers
+have one: pressing "Add to cart" while logged out opens the login window and then adds the item. Prices are never
+sent by the browser; every cart response is built from the `products` table, so price changes show straight away.
+Scoops are added as **live** or **offline** (their two prices; Go Live only while the Live switch is on), everything
+else as `standard`. Up to 10 of one line, and never more than the product's stock (a scoop's live and offline lines
+share its stock). A line the shop can't sell as it stands (hidden, sold out, not enough stock, live closed) is
+flagged with a `problem`, left out of the subtotal, and `canCheckout` turns false. Checkout itself comes in the
+orders phase. The cart button is on `/shop` only for now.
+
 ## API
 
 | Method | Path                 | Body                        |
@@ -119,6 +130,10 @@ same disk when deploying (`npm run build` does not touch it).
 | PUT    | `/api/admin/products/:id/images/:imageId/crop` | admin: `{ x, y, width, height }` re-crops the saved original; replaces the shop picture |
 | GET    | `/api/admin/products/:id/images/:imageId/original` | admin only: the full saved photo (for the crop screen) |
 | DELETE | `/api/admin/products/:id/images/:imageId` | admin: removes one picture and its files |
+| GET    | `/api/cart` | customer: `{ items, subtotalCents, count, canCheckout }` (401 when logged out) |
+| POST   | `/api/cart` | customer: `{ productId, mode, quantity? }` adds (or raises the line); `mode` = `live`, `offline` (scoops) or `standard` → the cart |
+| PATCH  | `/api/cart/:id` | customer: `{ quantity }` (1–10) sets one line → the cart |
+| DELETE | `/api/cart/:id` | customer: removes one line → the cart |
 | POST   | `/api/admin/customers/batch-delete` | `{ ids }` (1–50) → `{ deleted }` |
 | POST   | `/api/admin/customers/batch-reset` | `{ ids }` (1–20) → `{ sent, failed }`; 10 requests per 15 min |
 

@@ -6,6 +6,7 @@ import connectPgSimple from 'connect-pg-simple';
 import { pool, migrate } from './db';
 import { authRouter } from './auth';
 import { adminRouter } from './admin';
+import { cartRouter } from './cart';
 import { productsPublicRouter, PRODUCT_DIR } from './products';
 
 const isProd = process.env.NODE_ENV === 'production';
@@ -72,6 +73,7 @@ app.use(
 
 app.use('/api/auth', authRouter);
 app.use('/api/products', productsPublicRouter);
+app.use('/api/cart', cartRouter);
 app.use('/api', (_req, res) => res.status(404).json({ error: 'Not found' }));
 
 if (isProd) {

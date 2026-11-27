@@ -91,6 +91,25 @@ export type AdminProduct = {
 
 export type DeviceViewport = 'responsive' | 'desktop' | 'tablet' | 'mobile';
 
+// The server's view of a customer's cart (see server/cart.ts). A line with a `problem` can't be bought as it stands.
+export interface CartItem {
+  id: string;
+  productId: string;
+  name: string;
+  imageUrl: string | null;
+  kind: string;
+  mode: 'live' | 'offline' | 'standard';
+  unitCents: number;
+  quantity: number;
+  problem: string | null;
+}
+export interface Cart {
+  items: CartItem[];
+  subtotalCents: number;
+  count: number;
+  canCheckout: boolean;
+}
+
 export interface ScentNote {
   id: string;
   name: string;

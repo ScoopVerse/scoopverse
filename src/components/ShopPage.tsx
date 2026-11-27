@@ -4,11 +4,13 @@ import { GENDER_LABEL, type Gender, type PerfumeDetails, type PerfumeNotes, type
 import { formatPrice } from '../money';
 import { useAccount } from '../useAccount';
 import { useLive } from '../useLive';
+import { useCart } from '../useCart';
 import { AuthModal } from './AuthModal';
 import { SiteNav } from './SiteNav';
 import { SiteFooter } from './SiteFooter';
 import { ProductTile } from './ProductTile';
 import { FramedImage } from './FramedImage';
+import { CartDrawer } from './CartDrawer';
 import { LegendBeads, LegendModal } from './Legend';
 
 type Filter = 'all' | 'perfume' | 'scoop' | 'other';
@@ -34,6 +36,12 @@ export const ShopPage: React.FC = () => {
   const [sort, setSort] = useState<Sort>('newest');
   const [openId, setOpenId] = useState<string | null>(hashId);
   const live = useLive();
+  const cart = useCart(user);
+  // An "Add to cart" pressed while logged out waits here, and goes through once the customer has logged in.
+  const pendingAdd = useRef<{ productId: string; mode: string; from?: Fly } | null>(null);
+  // A picture flying from "Add to cart" to the cart button; the badge count waits (holdCount) until it lands.
+  const [fly, setFly] = useState<Fly | null>(null);
+  const [holdCount, setHoldCount] = useState<number | null>(null);
 
   useEffect(() => {
     document.title = 'Shop — ScoopVerse';
@@ -84,11 +92,31 @@ export const ShopPage: React.FC = () => {
     return list;
   }, [products, filter, gender, sort]);
 
+  // Adds to the cart (asking the customer to log in first). Returns an error message, or null when it worked.
+  const addToCart = async (productId: string, mode: string, from?: Fly) => {
+    if (!user) {
+      pendingAdd.current = { productId, mode, from };
+      setAuthOpen(true);
+      return null;
+    }
+    const before = cart.cart?.count ?? 0;
+    const err = await cart.add(productId, mode);
+    if (!err) added(before, from);
+    return err;
+  };
+  const added = (before: number, from?: Fly) => {
+    close();
+    if (from) {
+      setHoldCount(before);
+      setFly(from);
+    }
+  };
+
   const openProduct = products?.find((p) => p.id === openId) ?? null;
 
   return (
     <div className="site min-h-screen selection:bg-accent/20">
-      <SiteNav user={user} onLogin={() => setAuthOpen(true)} onLogout={logout} current="shop" />
+      <SiteNav user={user} onLogin={() => setAuthOpen(true)} onLogout={logout} current="shop" onCart={() => (user ? cart.setOpen(true) : setAuthOpen(true))} cartCount={holdCount ?? cart.cart?.count} />
 
       <main>
         <div className="page-wrap grid items-end gap-x-16 gap-y-4 pb-10 pt-12 lg:grid-cols-12">
@@ -205,16 +233,60 @@ export const ShopPage: React.FC = () => {
 
       <SiteFooter />
 
-      {openProduct && <ProductDetail product={openProduct} onClose={close} live={live} />}
+      {openProduct && <ProductDetail product={openProduct} onClose={close} live={live} onAdd={addToCart} />}
+      {fly && <FlyingPicture {...fly} onDone={() => { setFly(null); setHoldCount(null); }} />}
+      {cart.open && <CartDrawer cart={cart.cart} onClose={() => cart.setOpen(false)} onQuantity={cart.setQuantity} onRemove={cart.remove} />}
       <AuthModal
         open={authOpen}
-        onClose={() => setAuthOpen(false)}
-        onAuthed={(u) => {
+        onClose={() => {
+          pendingAdd.current = null;
+          setAuthOpen(false);
+        }}
+        onAuthed={async (u) => {
           setUser(u);
           setAuthOpen(false);
+          const pending = pendingAdd.current;
+          pendingAdd.current = null;
+          const before = cart.cart?.count ?? 0;
+          if (pending && !(await cart.add(pending.productId, pending.mode))) added(before, pending.from);
         }}
       />
     </div>
+  );
+};
+
+// Where a flying picture starts, and which picture it is.
+type Fly = { rect: DOMRect; src: string | null };
+
+// The product's picture, shrinking along an arc from the Add to cart button to the cart button in the top bar.
+// Only transform and opacity move; with reduced motion there is no flight (the badge just changes).
+const FlyingPicture: React.FC<Fly & { onDone: () => void }> = ({ rect, src, onDone }) => {
+  const ref = useRef<HTMLSpanElement>(null);
+  useEffect(() => {
+    const target = document.querySelector('[data-cart-button]')?.getBoundingClientRect();
+    if (!target || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return onDone();
+    const x = target.left + target.width / 2 - (rect.left + rect.width / 2);
+    const y = target.top + target.height / 2 - (rect.top + rect.height / 2);
+    const flight = ref.current!.animate(
+      [
+        { transform: 'translate(0, 0) scale(1)', opacity: 1 },
+        { transform: `translate(${x * 0.55}px, ${y * 0.55 - 90}px) scale(0.8)`, opacity: 1, offset: 0.5 },
+        { transform: `translate(${x}px, ${y}px) scale(0.3)`, opacity: 0.7 },
+      ],
+      { duration: 800, easing: 'cubic-bezier(0.4, 0, 0.2, 1)' },
+    );
+    flight.onfinish = onDone;
+    return () => flight.cancel();
+  }, []);
+  return (
+    <span
+      ref={ref}
+      aria-hidden
+      style={{ left: rect.left + rect.width / 2 - 28, top: rect.top + rect.height / 2 - 28 }}
+      className="pointer-events-none fixed z-[70] grid h-14 w-14 place-items-center overflow-hidden rounded-full border-2 border-accent bg-paper-2 text-accent shadow-lg"
+    >
+      {src ? <img src={src} alt="" className="h-full w-full object-cover" /> : <ShoppingBag className="h-6 w-6" />}
+    </span>
   );
 };
 
@@ -366,13 +438,15 @@ const OrderOptions: React.FC<{ details: ScoopDetails; livePrice: number; live: b
   );
 };
 
-const ProductDetail: React.FC<{ product: Product; onClose: () => void; live: boolean }> = ({ product, onClose, live }) => {
+const ProductDetail: React.FC<{ product: Product; onClose: () => void; live: boolean; onAdd: (productId: string, mode: string, from?: Fly) => Promise<string | null> }> = ({ product, onClose, live, onAdd }) => {
   // The list doesn't carry descriptions; this one product's comes when its pop-up opens.
   const [description, setDescription] = useState<string | undefined>();
   // Every picture of the listing (the list only carries the cover), and which one is showing.
   const [images, setImages] = useState<string[]>(product.imageUrl ? [product.imageUrl] : []);
   const [shot, setShot] = useState(0);
   const dialogRef = useRef<HTMLDivElement>(null);
+  const [adding, setAdding] = useState(false);
+  const [addError, setAddError] = useState<string | null>(null);
   const perfume = product.kind === 'perfume' ? product.details : null;
   const scoop = product.kind === 'scoop' ? product.details : null;
   // Go Live is only on offer while the shop is live; otherwise (or if the live ends while this is open) it's Offline.
@@ -506,11 +580,23 @@ const ProductDetail: React.FC<{ product: Product; onClose: () => void; live: boo
               )}
               <div className="mt-auto shrink-0 space-y-2 pt-1">
                 {scoop && <OrderOptions details={scoop} livePrice={product.priceCents} live={live} mode={mode} onMode={setPickedMode} />}
-                <button disabled className="btn btn-primary w-full">
+                <button
+                  disabled={!product.inStock || adding}
+                  onClick={async (e) => {
+                    setAdding(true);
+                    setAddError(await onAdd(product.id, scoop ? mode : 'standard', { rect: e.currentTarget.getBoundingClientRect(), src: images[0] ?? null }));
+                    setAdding(false);
+                  }}
+                  className="btn btn-primary w-full"
+                >
                   <ShoppingBag className="h-4 w-4" aria-hidden />
                   {product.inStock ? 'Add to cart' : 'Sold out'}
                 </button>
-                {product.inStock && <p className="text-center text-sm text-muted">Ordering opens soon.</p>}
+                {addError && (
+                  <p role="alert" className="text-center text-sm text-error">
+                    {addError}
+                  </p>
+                )}
               </div>
             </div>
           </div>

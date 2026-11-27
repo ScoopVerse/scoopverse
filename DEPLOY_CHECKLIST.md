@@ -126,7 +126,7 @@ Already working from the PC. On the server confirm:
 - [ ] Connect the **live** account (not sandbox) and top up the wallet; check the balance
       alert so confirmed shipments don't fail for lack of credit.
 - [ ] Register the webhook address (public HTTPS, must answer 200 within 3 seconds).
-- [ ] Confirm Singapore couriers, and that perfumes are allowed by the couriers we use.
+- [ ] Confirm Malaysian couriers, and that perfumes are allowed by the couriers we use.
 
 ## 11. Final check on the server
 

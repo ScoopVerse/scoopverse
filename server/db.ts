@@ -100,6 +100,16 @@ export async function migrate() {
       key   TEXT PRIMARY KEY,
       value JSONB NOT NULL
     );
+    -- A customer's cart. mode: 'live' or 'offline' for scoops (they have two prices), 'standard' for everything else.
+    CREATE TABLE IF NOT EXISTS cart_items (
+      id         BIGSERIAL PRIMARY KEY,
+      user_id    BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      product_id BIGINT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+      mode       TEXT NOT NULL CHECK (mode IN ('live', 'offline', 'standard')),
+      quantity   INTEGER NOT NULL CHECK (quantity BETWEEN 1 AND 10),
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      UNIQUE (user_id, product_id, mode)
+    );
     -- Descriptions used to be plain text; they are now formatted text (HTML). Convert the old ones once:
     -- escape what HTML treats specially, drop carriage returns, turn line breaks into <br>.
     UPDATE products SET description = '<p>' || replace(replace(replace(replace(replace(trim(description),
