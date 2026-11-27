@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { ArrowLeft, ShoppingBag, Sparkles, X } from 'lucide-react';
-import type { Product } from '../types';
+import { ArrowLeft, Clock, Droplets, ShoppingBag, Sparkles, X } from 'lucide-react';
+import type { PerfumeDetails, PerfumeNotes, Product } from '../types';
 import { formatPrice } from '../money';
 import { ScoopVerseLogo } from './ScoopVerseLogo';
 
@@ -81,7 +81,11 @@ export const ShopPage: React.FC = () => {
                   </div>
                   <div className="px-1 space-y-0.5">
                     <p className="font-bold leading-snug line-clamp-2 [overflow-wrap:anywhere]">{p.name}</p>
-                    <p className="text-sm font-semibold text-[#695282]">{formatPrice(p.priceCents)}</p>
+                    {p.details && <p className="text-xs text-[#7b757e] line-clamp-1 [overflow-wrap:anywhere]">Inspired by {p.details.inspiredBy}</p>}
+                    <p className="text-sm font-semibold text-[#695282]">
+                      {formatPrice(p.priceCents)}
+                      {p.details && <span className="ml-2 px-2 py-0.5 rounded-full bg-[#efdbff]/70 text-[#533d6b] text-[11px] font-bold">{p.details.concentration}</span>}
+                    </p>
                   </div>
                 </button>
               </li>
@@ -103,6 +107,71 @@ const ProductImage: React.FC<{ product: Product }> = ({ product }) =>
       <Sparkles className="w-10 h-10" />
     </div>
   );
+
+const CONCENTRATION_NAME = { EDP: 'Eau de Parfum', EDT: 'Eau de Toilette' };
+
+// Strength and staying power as two glass chips laid over the picture's bottom edge.
+const FragranceChips: React.FC<{ details: PerfumeDetails }> = ({ details: d }) => {
+  const chip = 'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/90 backdrop-blur-sm shadow-xs text-xs font-bold text-[#533d6b]';
+  return (
+    <div className="absolute bottom-4 left-4 right-4 flex flex-wrap gap-2">
+      <span className={chip}>
+        <Droplets className="w-3.5 h-3.5 text-[#9d84b7]" />
+        {d.concentration} <span className="font-semibold text-[#7b757e]">{CONCENTRATION_NAME[d.concentration]}</span>
+      </span>
+      <span className={chip}>
+        <Clock className="w-3.5 h-3.5 text-[#9d84b7]" />
+        Lasts {d.hoursMin === d.hoursMax ? d.hoursMin : `${d.hoursMin}–${d.hoursMax}`} hours
+      </span>
+    </div>
+  );
+};
+
+// What it is inspired by, and the one-line pitch.
+const FragranceBox: React.FC<{ details: PerfumeDetails }> = ({ details: d }) => (
+  <div className="shrink-0 rounded-2xl border border-[#e3d2f3] bg-gradient-to-br from-[#f8f1fd] to-[#fff4ea] px-4 py-3 space-y-1.5">
+    <p className="flex flex-wrap items-baseline gap-x-2 [overflow-wrap:anywhere]">
+      <span className="text-xs font-semibold text-[#7b757e]">Inspired by</span>
+      <span className="font-serif-display text-xl font-bold leading-snug text-[#2d2438]">{d.inspiredBy}</span>
+    </p>
+    {d.tagline && (
+      <p className="flex items-start gap-2 text-sm italic leading-snug text-[#533d6b] [overflow-wrap:anywhere]">
+        <Sparkles className="w-4 h-4 shrink-0 mt-0.5 text-[#d4af37]" />
+        {d.tagline}
+      </p>
+    )}
+  </div>
+);
+
+const NOTE_ROWS = [
+  { key: 'top', label: 'Top', hint: 'opening', dot: 'bg-[#f2b880]', chip: 'bg-[#fff0e0] text-[#8a5a1c] border-[#f3d9b8]' },
+  { key: 'heart', label: 'Heart', hint: 'core', dot: 'bg-[#b793d6]', chip: 'bg-[#f3e8fb] text-[#533d6b] border-[#e3d2f3]' },
+  { key: 'base', label: 'Base', hint: 'lasting', dot: 'bg-[#8a6a52]', chip: 'bg-[#ece4dc] text-[#5a4636] border-[#dacbbd]' },
+] as const;
+
+// The notes box: top, heart and base notes as coloured chips. Rows with no notes are left out; no notes at all, no box.
+const NotesBox: React.FC<{ notes: PerfumeNotes }> = ({ notes }) => {
+  const rows = NOTE_ROWS.filter((r) => notes[r.key].length > 0);
+  if (rows.length === 0) return null;
+  return (
+    <div className="shrink-0 rounded-2xl border border-[#e6e2dc] bg-[#fdfaf6] px-4 py-3 space-y-2.5">
+      <p className="text-xs font-semibold text-[#7b757e]">Fragrance notes</p>
+      {rows.map((r) => (
+        <div key={r.key} className="grid grid-cols-[3.75rem_minmax(0,1fr)] gap-3 items-start" title={r.hint}>
+          <div className="flex items-center gap-2 pt-1">
+            <span className={`w-2 h-2 rounded-full shrink-0 ${r.dot}`} aria-hidden />
+            <p className="text-xs font-bold leading-none text-[#2d2438]">{r.label}</p>
+          </div>
+          <ul className="flex flex-wrap gap-1.5" aria-label={`${r.label} notes`}>
+            {notes[r.key].map((n, i) => (
+              <li key={i} className={`px-2.5 py-0.5 rounded-full border text-xs font-semibold [overflow-wrap:anywhere] ${r.chip}`}>{n}</li>
+            ))}
+          </ul>
+        </div>
+      ))}
+    </div>
+  );
+};
 
 const ProductDetail: React.FC<{ product: Product; onClose: () => void }> = ({ product, onClose }) => {
   // The list doesn't carry descriptions; this one product's comes when its pop-up opens.
@@ -164,30 +233,42 @@ const ProductDetail: React.FC<{ product: Product; onClose: () => void }> = ({ pr
             <X className="w-4 h-4" />
           </button>
           {/* Always square, so the picture is never stretched however long the text is. */}
-          <div className="aspect-square bg-[#f7f3ed]">
+          <div className="relative aspect-square bg-[#f7f3ed]">
             <ProductImage product={product} />
+            {product.details && <FragranceChips details={product.details} />}
           </div>
           {/* Wide screens: this column is exactly as tall as the picture (the content is laid over it), so the pop-up never
               grows with the text; the description scrolls instead. Narrow screens: stacked, description height capped. */}
           <div className="relative min-w-0">
-          <div className="p-6 sm:p-8 flex flex-col gap-4 lg:absolute lg:inset-0">
-            <div className="space-y-2 shrink-0">
-              <h2 className="font-serif-display text-3xl font-bold leading-tight pr-8 lg:pr-0 [overflow-wrap:anywhere]">{product.name}</h2>
-              <p className="text-xl font-bold text-[#695282]">{formatPrice(product.priceCents)}</p>
+          <div className="p-6 sm:p-8 flex flex-col gap-4 lg:p-6 lg:gap-3 lg:absolute lg:inset-0">
+            <div className="shrink-0 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 lg:pr-10">
+              <h2 className="font-serif-display text-3xl font-bold leading-tight min-w-0 flex-1 basis-48 pr-8 lg:pr-0 [overflow-wrap:anywhere]">{product.name}</h2>
+              <p className="text-xl font-bold text-[#695282] shrink-0">{formatPrice(product.priceCents)}</p>
             </div>
-            {/* Already cleaned by the server (allow-listed tags only), so it is safe to show as HTML. */}
-            {description && (
+            {product.details && <FragranceBox details={product.details} />}
+            {/* Wide screens: the notes box and the description scroll together under the fixed perfume box. Narrow screens:
+                the page scrolls and only the description is height-capped, as before. */}
+            {(product.details?.notes || description) && (
               <div
-                className="rich-text text-sm text-[#4a454e] leading-relaxed min-h-0 overflow-y-auto max-h-[max(6rem,20vh)] lg:max-h-none lg:flex-1 [scrollbar-gutter:stable] [scrollbar-width:thin] [scrollbar-color:#c9b6dc_transparent]"
+                className="flex flex-col gap-4 min-h-0 lg:flex-1 lg:overflow-y-auto [scrollbar-gutter:stable] [scrollbar-width:thin] [scrollbar-color:#c9b6dc_transparent]"
                 tabIndex={0}
-                aria-label="Product description"
-                dangerouslySetInnerHTML={{ __html: description }}
-              />
+                aria-label="Product details"
+              >
+                {product.details?.notes && <NotesBox notes={product.details.notes} />}
+                {/* Already cleaned by the server (allow-listed tags only), so it is safe to show as HTML. */}
+                {description && (
+                  <div
+                    className="rich-text text-sm text-[#4a454e] leading-relaxed overflow-y-auto max-h-[max(6rem,20vh)] lg:max-h-none lg:overflow-visible [scrollbar-gutter:stable] [scrollbar-width:thin] [scrollbar-color:#c9b6dc_transparent]"
+                    aria-label="Product description"
+                    dangerouslySetInnerHTML={{ __html: description }}
+                  />
+                )}
+              </div>
             )}
-            <div className="mt-auto pt-2 space-y-2 shrink-0">
+            <div className="mt-auto pt-1 space-y-1.5 shrink-0">
               <button
                 disabled
-                className="w-full py-4 rounded-2xl bg-[#c9c3cc] text-white font-bold text-sm cursor-not-allowed flex items-center justify-center gap-2"
+                className="w-full py-4 lg:py-3.5 rounded-2xl bg-[#c9c3cc] text-white font-bold text-sm cursor-not-allowed flex items-center justify-center gap-2"
               >
                 <ShoppingBag className="w-4 h-4" />
                 {product.inStock ? 'ADD TO CART' : 'SOLD OUT'}

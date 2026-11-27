@@ -18,6 +18,15 @@ const inputClass =
   'w-full px-4 py-3 rounded-2xl bg-[#f7f3ed] border border-[#e6e2dc] focus:border-[#9d84b7] focus:bg-white focus:outline-hidden text-sm transition-all text-[#1c1c18] placeholder-[#7b757e]';
 const labelClass = 'text-xs font-bold uppercase tracking-wider text-[#7b757e] block';
 
+// "Bergamot, Lavender ,, Mint" -> ['Bergamot', 'Lavender', 'Mint']
+const splitNotes = (text: string) => text.split(',').map((n) => n.trim()).filter(Boolean);
+
+const NOTE_FIELDS = [
+  { key: 'top', label: 'Top notes', hint: 'what you smell first', placeholder: 'Bergamot, Lavender, Mint' },
+  { key: 'heart', label: 'Heart notes', hint: 'the main character', placeholder: 'Rose, Jasmine, Pepper' },
+  { key: 'base', label: 'Base notes', hint: 'what lingers', placeholder: 'Vanilla, Amber, Musk' },
+] as const;
+
 async function sendJson(method: string, url: string, body?: unknown) {
   const res = await fetch(url, {
     method,
@@ -36,6 +45,16 @@ export const ProductsTab: React.FC<Props> = ({ onSessionExpired }) => {
   const [editing, setEditing] = useState<AdminProduct | 'new' | null>(null);
   const [deleting, setDeleting] = useState<AdminProduct | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+  // Ticked products (ids) for "Delete selected".
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+  const toggleSelected = (id: string) =>
+    setSelected((s) => {
+      const next = new Set(s);
+      if (!next.delete(id)) next.add(id);
+      return next;
+    });
+  const allSelected = products.length > 0 && selected.size === products.length;
 
   useEffect(() => {
     fetch('/api/admin/products')
@@ -71,9 +90,22 @@ export const ProductsTab: React.FC<Props> = ({ onSessionExpired }) => {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-3">
-        <p className="text-sm text-[#7b757e]">
-          {products.length} {products.length === 1 ? 'product' : 'products'}
-        </p>
+        <div className="flex items-center gap-4">
+          <p className="text-sm text-[#7b757e]">
+            {products.length} {products.length === 1 ? 'product' : 'products'}
+          </p>
+          {products.length > 0 && (
+            <label className="inline-flex items-center gap-2 text-sm font-semibold text-[#4a454e] cursor-pointer">
+              <input
+                type="checkbox"
+                checked={allSelected}
+                onChange={() => setSelected(allSelected ? new Set() : new Set(products.map((p) => p.id)))}
+                className="w-4 h-4 rounded accent-[#695282]"
+              />
+              Select all
+            </label>
+          )}
+        </div>
         <button
           onClick={() => setEditing('new')}
           className="inline-flex items-center gap-2 text-sm font-bold text-white bg-[#695282] hover:bg-[#533d6b] px-5 py-2.5 rounded-full shadow-sm transition-all"
@@ -82,6 +114,24 @@ export const ProductsTab: React.FC<Props> = ({ onSessionExpired }) => {
           Add product
         </button>
       </div>
+
+      {selected.size > 0 && (
+        <div className="sticky top-[7.5rem] z-20 flex flex-wrap items-center gap-2 bg-[#2d2438] text-white rounded-2xl px-4 py-3 shadow-lg">
+          <span className="text-sm font-bold mr-1">{selected.size} selected</span>
+          <button onClick={() => setSelected(new Set())} className="text-sm font-semibold text-[#d9c8ec] hover:text-white underline underline-offset-2">
+            Clear
+          </button>
+          {selected.size > BULK_MAX && <span className="text-xs text-[#ffd1b3]">You can delete up to {BULK_MAX} products at a time.</span>}
+          <button
+            onClick={() => setBulkDeleting(true)}
+            disabled={selected.size > BULK_MAX}
+            className="ml-auto inline-flex items-center gap-2 text-sm font-bold bg-[#a33a3a] hover:bg-[#862e2e] disabled:opacity-40 disabled:cursor-not-allowed px-4 py-2 rounded-full transition-all"
+          >
+            <Trash2 className="w-4 h-4" />
+            Delete selected
+          </button>
+        </div>
+      )}
 
       {notice && (
         <p role="status" className="flex items-start gap-2 text-sm text-[#2f5d50] bg-[#e6f4ef] border border-[#b9e5d8] rounded-xl px-4 py-2.5">
@@ -110,10 +160,23 @@ export const ProductsTab: React.FC<Props> = ({ onSessionExpired }) => {
         <ul className="divide-y divide-[#efe7f5]">
           {products.map((p) => (
             <li key={p.id} className={`px-4 sm:px-5 py-4 flex flex-wrap sm:flex-nowrap items-center gap-x-4 gap-y-3 ${p.active ? '' : 'bg-[#faf8f5]'}`}>
+              <input
+                type="checkbox"
+                checked={selected.has(p.id)}
+                onChange={() => toggleSelected(p.id)}
+                aria-label={`Select ${p.name}`}
+                className="w-4 h-4 rounded accent-[#695282] shrink-0"
+              />
               <Thumb url={p.imageUrl} className="w-14 h-14 shrink-0" />
               <div className="min-w-0 flex-1 basis-40">
                 <p className={`font-bold truncate ${p.active ? 'text-[#1c1c18]' : 'text-[#7b757e]'}`}>{p.name}</p>
                 <p className="text-sm text-[#4a454e]">
+                  {p.kind === 'perfume' && (
+                    <>
+                      <span className="font-semibold text-[#695282]">Perfume</span>
+                      <span className="text-[#c9c3cc]"> · </span>
+                    </>
+                  )}
                   {formatPrice(p.priceCents)}
                   <span className="text-[#c9c3cc]"> · </span>
                   {p.stock > 0 ? (
@@ -179,8 +242,23 @@ export const ProductsTab: React.FC<Props> = ({ onSessionExpired }) => {
           onClose={() => setDeleting(null)}
           onDeleted={() => {
             setProducts((list) => list.filter((x) => x.id !== deleting.id));
+            setSelected((s) => new Set([...s].filter((id) => id !== deleting.id)));
             setNotice(`Deleted "${deleting.name}".`);
             setDeleting(null);
+          }}
+          onSessionExpired={onSessionExpired}
+        />
+      )}
+
+      {bulkDeleting && (
+        <BulkDeleteDialog
+          ids={[...selected]}
+          onClose={() => setBulkDeleting(false)}
+          onDeleted={(count) => {
+            setProducts((list) => list.filter((x) => !selected.has(x.id)));
+            setSelected(new Set());
+            setNotice(`Deleted ${count} ${count === 1 ? 'product' : 'products'}.`);
+            setBulkDeleting(false);
           }}
           onSessionExpired={onSessionExpired}
         />
@@ -228,6 +306,20 @@ const ProductForm: React.FC<FormProps> = ({ product, onClose, onSaved, onChanged
   const [price, setPrice] = useState(product ? centsToDollars(product.priceCents) : '');
   const [stock, setStock] = useState(String(product?.stock ?? 0));
   const [active, setActive] = useState(product?.active ?? true);
+  // Listing type and the perfume box ('scoop' can't be chosen yet, so it shows as plain "other").
+  const [kind, setKind] = useState<'perfume' | 'other'>(product?.kind === 'perfume' ? 'perfume' : 'other');
+  const pd = product?.details;
+  const [inspiredBy, setInspiredBy] = useState(pd?.inspiredBy ?? '');
+  const [concentration, setConcentration] = useState<'EDP' | 'EDT'>(pd?.concentration ?? 'EDP');
+  const [hoursMin, setHoursMin] = useState(pd ? String(pd.hoursMin) : '');
+  const [hoursMax, setHoursMax] = useState(pd ? String(pd.hoursMax) : '');
+  const [tagline, setTagline] = useState(pd?.tagline ?? '');
+  // Notes are typed as comma-separated text and sent as lists.
+  const [noteText, setNoteText] = useState({
+    top: pd?.notes?.top.join(', ') ?? '',
+    heart: pd?.notes?.heart.join(', ') ?? '',
+    base: pd?.notes?.base.join(', ') ?? '',
+  });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -266,10 +358,25 @@ const ProductForm: React.FC<FormProps> = ({ product, onClose, onSaved, onChanged
     if (priceCents === null) return setError('Enter a price like 12.50 (from 0.01 to 999999.99).');
     if (!/^\d{1,7}$/.test(stock.trim()) || stockNumber > 1_000_000) return setError('Stock must be a whole number from 0 to 1,000,000.');
 
+    let details = null;
+    if (kind === 'perfume') {
+      const min = Number(hoursMin);
+      const max = Number(hoursMax);
+      if (!inspiredBy.trim()) return setError('Please enter what the perfume is inspired by.');
+      if (!/^\d{1,2}$/.test(hoursMin.trim()) || !/^\d{1,2}$/.test(hoursMax.trim()) || min < 1 || max > 48 || min > max) {
+        return setError('Enter how long it lasts as whole hours from 1 to 48, e.g. 6 to 8.');
+      }
+      const notes = { top: splitNotes(noteText.top), heart: splitNotes(noteText.heart), base: splitNotes(noteText.base) };
+      if (Object.values(notes).some((l) => l.length > 10 || l.some((n) => n.length > 30))) {
+        return setError('Each notes list can have up to 10 notes, each up to 30 characters.');
+      }
+      details = { inspiredBy, concentration, hoursMin: min, hoursMax: max, tagline, notes };
+    }
+
     setBusy(true);
     setError(null);
     try {
-      const body = { name, description, priceCents, stock: stockNumber, active };
+      const body = { name, description, priceCents, stock: stockNumber, active, kind, details };
       const { res, data } = saved
         ? await sendJson('PATCH', `/api/admin/products/${saved.id}`, body)
         : await sendJson('POST', '/api/admin/products', body);
@@ -339,7 +446,7 @@ const ProductForm: React.FC<FormProps> = ({ product, onClose, onSaved, onChanged
           aria-label={saved ? 'Edit product' : 'Add product'}
           onSubmit={submit}
           onClick={(e) => e.stopPropagation()}
-          className="relative w-full max-w-lg bg-white rounded-3xl p-6 sm:p-8 border border-white shadow-xl space-y-5"
+          className="relative w-full max-w-[70.4rem] bg-white rounded-3xl p-6 sm:p-8 border border-white shadow-xl space-y-5"
         >
           <button
             type="button"
@@ -382,9 +489,88 @@ const ProductForm: React.FC<FormProps> = ({ product, onClose, onSaved, onChanged
           </div>
 
           <div className="space-y-2">
+            <span className={labelClass}>Listing type</span>
+            <div role="group" aria-label="Listing type" className="inline-flex flex-wrap gap-1.5 p-1 rounded-full bg-[#f7f3ed] border border-[#e6e2dc]">
+              {(['perfume', 'scoop', 'other'] as const).map((k) => (
+                <button
+                  key={k}
+                  type="button"
+                  aria-pressed={kind === k}
+                  disabled={k === 'scoop'}
+                  onClick={() => k !== 'scoop' && setKind(k)}
+                  className={`px-4 py-1.5 rounded-full text-sm font-bold transition-all disabled:cursor-not-allowed ${
+                    kind === k ? 'bg-[#695282] text-white shadow-sm' : k === 'scoop' ? 'text-[#b9b2bd]' : 'text-[#4a454e] hover:bg-white'
+                  }`}
+                >
+                  {k === 'perfume' ? 'Perfume' : k === 'scoop' ? 'Scoop (soon)' : 'Other'}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="space-y-2">
             <label htmlFor="product-name" className={labelClass}>Name</label>
             <input id="product-name" required maxLength={120} value={name} onChange={(e) => setName(e.target.value)} className={inputClass} placeholder="e.g. Midnight Vanilla Scoop" />
           </div>
+          {kind === 'perfume' && (
+            <fieldset className="rounded-2xl border border-[#e3d2f3] bg-[#f8f1fd]/60 p-4 sm:p-5 space-y-4">
+              <legend className="px-2 text-xs font-bold uppercase tracking-wider text-[#695282]">Perfume details (shown in a box in the shop)</legend>
+              <div className="space-y-2">
+                <label htmlFor="perfume-inspired" className={labelClass}>Inspired by</label>
+                <input id="perfume-inspired" maxLength={80} value={inspiredBy} onChange={(e) => setInspiredBy(e.target.value)} className={inputClass} placeholder="e.g. Versace Eros" />
+              </div>
+              <div className="grid sm:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <span className={labelClass}>Type</span>
+                  <div role="group" aria-label="Perfume type" className="inline-flex gap-1.5 p-1 rounded-full bg-white border border-[#e6e2dc]">
+                    {(['EDP', 'EDT'] as const).map((c) => (
+                      <button
+                        key={c}
+                        type="button"
+                        aria-pressed={concentration === c}
+                        onClick={() => setConcentration(c)}
+                        className={`px-4 py-1.5 rounded-full text-sm font-bold transition-all ${concentration === c ? 'bg-[#695282] text-white shadow-sm' : 'text-[#4a454e] hover:bg-[#efdbff]/50'}`}
+                      >
+                        {c}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-xs text-[#7b757e]">EDP = Eau de Parfum, EDT = Eau de Toilette</p>
+                </div>
+                <div className="space-y-2">
+                  <span className={labelClass}>Lasts (hours)</span>
+                  <div className="flex items-center gap-2">
+                    <input aria-label="Lasts from (hours)" inputMode="numeric" maxLength={2} value={hoursMin} onChange={(e) => setHoursMin(e.target.value)} className={`${inputClass} text-center`} placeholder="6" />
+                    <span className="text-[#7b757e] font-bold">to</span>
+                    <input aria-label="Lasts up to (hours)" inputMode="numeric" maxLength={2} value={hoursMax} onChange={(e) => setHoursMax(e.target.value)} className={`${inputClass} text-center`} placeholder="8" />
+                  </div>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <label htmlFor="perfume-tagline" className={labelClass}>Special line (optional)</label>
+                <input id="perfume-tagline" maxLength={140} value={tagline} onChange={(e) => setTagline(e.target.value)} className={inputClass} placeholder="One line on who it suits, e.g. Bold and fresh for date nights" />
+              </div>
+            </fieldset>
+          )}
+          {kind === 'perfume' && (
+            <fieldset className="rounded-2xl border border-[#f1dcc6] bg-[#fff7ee]/70 p-4 sm:p-5 space-y-4">
+              <legend className="px-2 text-xs font-bold uppercase tracking-wider text-[#8a5a1c]">Fragrance notes (optional, shown in a second box)</legend>
+              {NOTE_FIELDS.map((f) => (
+                <div key={f.key} className="space-y-2">
+                  <label htmlFor={`notes-${f.key}`} className={labelClass}>
+                    {f.label} <span className="normal-case tracking-normal font-medium">· {f.hint}</span>
+                  </label>
+                  <input
+                    id={`notes-${f.key}`}
+                    value={noteText[f.key]}
+                    onChange={(e) => setNoteText((t) => ({ ...t, [f.key]: e.target.value }))}
+                    className={inputClass}
+                    placeholder={f.placeholder}
+                  />
+                </div>
+              ))}
+              <p className="text-xs text-[#7b757e]">Separate the notes with commas. Up to 10 per row; leave a row empty to hide it in the shop.</p>
+            </fieldset>
+          )}
           <div className="space-y-2">
             <span className={labelClass}>Description</span>
             <RichTextEditor value={description} onChange={setDescription} />
@@ -422,6 +608,55 @@ const ProductForm: React.FC<FormProps> = ({ product, onClose, onSaved, onChanged
     </div>
     {draft && <ImageCropper file={draft.file} initialArea={draft.initial} onCancel={() => setDraft(null)} onDone={applyCrop} />}
     </>
+  );
+};
+
+const BULK_MAX = 100; // must match BATCH_MAX in server/products.ts
+
+const BulkDeleteDialog: React.FC<{
+  ids: string[];
+  onClose: () => void;
+  onDeleted: (count: number) => void;
+  onSessionExpired: () => void;
+}> = ({ ids, onClose, onDeleted, onSessionExpired }) => {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const confirm = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const { res, data } = await sendJson('POST', '/api/admin/products/batch-delete', { ids });
+      if (res.status === 401) return onSessionExpired();
+      if (!res.ok) return setError(data.error ?? 'Something went wrong. Please try again.');
+      onDeleted(ids.length);
+    } catch {
+      setError('Could not reach the server. Please try again.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Dialog title={`Delete ${ids.length} ${ids.length === 1 ? 'product' : 'products'}?`} icon={Trash2} danger onClose={onClose}>
+      <p className="text-sm text-[#4a454e]">
+        The {ids.length} selected {ids.length === 1 ? 'product and its picture' : 'products and their pictures'} will be deleted permanently. This
+        cannot be undone.
+      </p>
+      {error && (
+        <p role="alert" className="text-sm text-[#a33a3a] bg-[#fbeaea] border border-[#f1cccc] rounded-xl px-4 py-2.5">
+          {error}
+        </p>
+      )}
+      <div className="flex gap-2 justify-end">
+        <button onClick={onClose} className="text-sm font-bold text-[#7b757e] hover:text-[#4a454e] px-4 py-2 rounded-full">
+          Cancel
+        </button>
+        <button onClick={confirm} disabled={busy} className="text-sm font-bold text-white bg-[#a33a3a] hover:bg-[#862e2e] disabled:opacity-60 px-5 py-2 rounded-full transition-all">
+          {busy ? 'Deleting…' : `Delete ${ids.length}`}
+        </button>
+      </div>
+    </Dialog>
   );
 };
 

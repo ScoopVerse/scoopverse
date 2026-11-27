@@ -74,6 +74,9 @@ export async function migrate() {
     -- The full uploaded photo (file name in uploads/originals/, never public) and the crop applied to it, in percent.
     ALTER TABLE products ADD COLUMN IF NOT EXISTS image_original TEXT;
     ALTER TABLE products ADD COLUMN IF NOT EXISTS image_crop JSONB;
+    -- Listing type: perfume (bottle), scoop (not built yet) or other. "details" holds the type's extra fields as JSON.
+    ALTER TABLE products ADD COLUMN IF NOT EXISTS kind TEXT NOT NULL DEFAULT 'other' CHECK (kind IN ('perfume', 'scoop', 'other'));
+    ALTER TABLE products ADD COLUMN IF NOT EXISTS details JSONB;
     -- Descriptions used to be plain text; they are now formatted text (HTML). Convert the old ones once:
     -- escape what HTML treats specially, drop carriage returns, turn line breaks into <br>.
     UPDATE products SET description = '<p>' || replace(replace(replace(replace(replace(trim(description),

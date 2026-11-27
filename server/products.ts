@@ -14,6 +14,10 @@ const ORIGINAL_DIR = path.join(UPLOAD_ROOT, 'originals');
 const UPLOAD_MAX_BYTES = 30 * 1024 * 1024;
 const NOT_FOUND = 'This product no longer exists.';
 
+// What kind of listing a product is. 'scoop' exists in the database for later but can't be chosen yet.
+const KINDS = ['perfume', 'other'];
+type Notes = { top: string[]; heart: string[]; base: string[] };
+type PerfumeDetails = { inspiredBy: string; concentration: 'EDP' | 'EDT'; hoursMin: number; hoursMax: number; tagline: string; notes: Notes };
 type Crop = { x: number; y: number; width: number; height: number }; // percent of the original picture
 type ProductRow = {
   id: string;
@@ -25,9 +29,11 @@ type ProductRow = {
   image_original: string | null;
   image_crop: Crop | null;
   active: boolean;
+  kind: string;
+  details: PerfumeDetails | null;
   created_at: Date;
 };
-const COLUMNS = 'id, name, description, price_cents, stock, image, image_original, image_crop, active, created_at';
+const COLUMNS = 'id, name, description, price_cents, stock, image, image_original, image_crop, active, kind, details, created_at';
 const imageUrl = (p: ProductRow) => (p.image ? `/uploads/products/${p.image}` : null);
 
 const adminProduct = (p: ProductRow) => ({
@@ -40,6 +46,8 @@ const adminProduct = (p: ProductRow) => ({
   imageUrl: imageUrl(p),
   hasOriginal: p.image_original !== null,
   crop: p.image_crop,
+  kind: p.kind,
+  details: p.details,
 });
 // What the public shop sees: no stock count, only whether it can be bought. The list leaves descriptions out
 // (the grid doesn't show them); the single-product route includes it.
@@ -50,6 +58,8 @@ const publicProduct = (p: ProductRow, withDescription = false) => ({
   priceCents: p.price_cents,
   inStock: p.stock > 0,
   imageUrl: imageUrl(p),
+  kind: p.kind,
+  details: p.details,
 });
 
 // Descriptions are formatted text (HTML from the editor) shown to every shopper, so only a short allow-list of
@@ -102,10 +112,53 @@ async function renderShopImage(original: Buffer, crop: Crop | null) {
 
 const newName = () => `${randomBytes(12).toString('hex')}.webp`;
 
+// One line of plain text: any run of whitespace (line breaks included) becomes one space, so it can't break the layout.
+const oneLine = (v: unknown) => String(v ?? '').replace(/\s+/g, ' ').trim();
+
+const NOTES_MAX = 10; // notes per list
+const NOTE_MAX_LENGTH = 30;
+
+// Top / heart / base notes, each a list of short names. Missing lists are empty (older callers don't send notes).
+function parseNotes(v: any): { value: Notes } | { error: string } {
+  const out: Notes = { top: [], heart: [], base: [] };
+  for (const key of ['top', 'heart', 'base'] as const) {
+    const list = v?.[key] ?? [];
+    if (!Array.isArray(list) || list.length > NOTES_MAX) return { error: `Each notes list can have up to ${NOTES_MAX} notes.` };
+    const notes = list.map(oneLine).filter(Boolean);
+    if (notes.some((n) => n.length > NOTE_MAX_LENGTH)) return { error: `Each note can be up to ${NOTE_MAX_LENGTH} characters.` };
+    out[key] = notes;
+  }
+  return { value: out };
+}
+
+function parsePerfume(v: any): { value: PerfumeDetails } | { error: string } {
+  const inspiredBy = oneLine(v?.inspiredBy);
+  const tagline = oneLine(v?.tagline);
+  const { concentration, hoursMin, hoursMax } = v ?? {};
+  if (!inspiredBy || inspiredBy.length > 80) return { error: 'Please enter what the perfume is inspired by (max 80 characters).' };
+  if (concentration !== 'EDP' && concentration !== 'EDT') return { error: 'Please choose EDP or EDT.' };
+  const hoursOk = (h: unknown) => Number.isInteger(h) && (h as number) >= 1 && (h as number) <= 48;
+  if (!hoursOk(hoursMin) || !hoursOk(hoursMax) || hoursMin > hoursMax) {
+    return { error: 'Lasting time must be whole hours from 1 to 48, with the first number not above the second.' };
+  }
+  if (tagline.length > 140) return { error: 'The special line is too long (max 140 characters).' };
+  const notes = parseNotes(v?.notes);
+  if ('error' in notes) return notes;
+  return { value: { inspiredBy, concentration, hoursMin, hoursMax, tagline, notes: notes.value } };
+}
+
 function parseProduct(body: any) {
   const name = String(body?.name ?? '').trim();
   const description = cleanDescription(String(body?.description ?? ''));
   const { priceCents, stock, active } = body ?? {};
+  const kind = body?.kind ?? 'other'; // callers that don't send a type get a plain listing
+  if (!KINDS.includes(kind)) return { error: 'Please choose a listing type.' };
+  let details: PerfumeDetails | null = null;
+  if (kind === 'perfume') {
+    const p = parsePerfume(body?.details);
+    if ('error' in p) return p;
+    details = p.value;
+  }
   if (!name || name.length > 120) return { error: 'Please enter a product name (max 120 characters).' };
   if (description.length > DESCRIPTION_MAX) return { error: 'The description is too long. Please shorten it.' };
   if (!Number.isInteger(priceCents) || priceCents < 1 || priceCents > 99_999_999) {
@@ -113,7 +166,7 @@ function parseProduct(body: any) {
   }
   if (!Number.isInteger(stock) || stock < 0 || stock > 1_000_000) return { error: 'Stock must be a whole number from 0 to 1,000,000.' };
   if (typeof active !== 'boolean') return { error: 'Please choose whether the product is visible in the shop.' };
-  return { value: { name, description, priceCents: priceCents as number, stock: stock as number, active } };
+  return { value: { name, description, priceCents: priceCents as number, stock: stock as number, active, kind: kind as string, details } };
 }
 
 // --- Admin (mounted under /api/admin/products, after the admin login check) ---
@@ -134,8 +187,8 @@ productsAdminRouter.post('/', async (req, res) => {
   if ('error' in parsed) return res.status(400).json({ error: parsed.error });
   const v = parsed.value;
   const { rows } = await pool.query<ProductRow>(
-    `INSERT INTO products (name, description, price_cents, stock, active) VALUES ($1, $2, $3, $4, $5) RETURNING ${COLUMNS}`,
-    [v.name, v.description, v.priceCents, v.stock, v.active],
+    `INSERT INTO products (name, description, price_cents, stock, active, kind, details) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING ${COLUMNS}`,
+    [v.name, v.description, v.priceCents, v.stock, v.active, v.kind, v.details && JSON.stringify(v.details)],
   );
   res.status(201).json({ product: adminProduct(rows[0]) });
 });
@@ -145,9 +198,9 @@ productsAdminRouter.patch('/:id', async (req, res) => {
   if ('error' in parsed) return res.status(400).json({ error: parsed.error });
   const v = parsed.value;
   const { rows } = await pool.query<ProductRow>(
-    `UPDATE products SET name = $2, description = $3, price_cents = $4, stock = $5, active = $6
+    `UPDATE products SET name = $2, description = $3, price_cents = $4, stock = $5, active = $6, kind = $7, details = $8
      WHERE id = $1 RETURNING ${COLUMNS}`,
-    [req.params.id, v.name, v.description, v.priceCents, v.stock, v.active],
+    [req.params.id, v.name, v.description, v.priceCents, v.stock, v.active, v.kind, v.details && JSON.stringify(v.details)],
   );
   if (!rows[0]) return res.status(404).json({ error: NOT_FOUND });
   res.json({ product: adminProduct(rows[0]) });
@@ -257,6 +310,21 @@ productsAdminRouter.get('/:id/original', async (req, res) => {
   const { rows } = await pool.query<{ image_original: string | null }>('SELECT image_original FROM products WHERE id = $1', [req.params.id]);
   if (!rows[0]?.image_original) return res.status(404).json({ error: 'No original photo saved.' });
   res.sendFile(path.join(ORIGINAL_DIR, rows[0].image_original), { cacheControl: false });
+});
+
+// Body { ids: ["1", "2", ...] }: deletes up to BATCH_MAX products and their picture files. Ids that no longer exist are skipped.
+const BATCH_MAX = 100;
+productsAdminRouter.post('/batch-delete', async (req, res) => {
+  const ids = req.body?.ids;
+  if (!Array.isArray(ids) || ids.length === 0 || ids.length > BATCH_MAX || !ids.every((id) => typeof id === 'string' && /^\d{1,18}$/.test(id))) {
+    return res.status(400).json({ error: `Select between 1 and ${BATCH_MAX} products.` });
+  }
+  const { rows } = await pool.query<{ image: string | null; image_original: string | null }>(
+    'DELETE FROM products WHERE id = ANY($1::bigint[]) RETURNING image, image_original',
+    [[...new Set(ids)]],
+  );
+  await Promise.all(rows.flatMap((r) => [removeFile(PRODUCT_DIR, r.image), removeFile(ORIGINAL_DIR, r.image_original)]));
+  res.json({ deleted: rows.length });
 });
 
 productsAdminRouter.delete('/:id', async (req, res) => {

@@ -77,6 +77,11 @@ admin's text editor (Tiptap) and stored as HTML. The server cleans every descrip
 (`sanitize-html`): only those tags and font/size styles survive, so a description can't carry a script,
 link or image. Old plain-text descriptions were converted once at startup.
 
+Every product has a listing type, chosen in the admin form: **Perfume**, **Other** (Scoop is reserved, not built yet). A perfume also has
+its own box in the shop: what it is inspired by, EDP or EDT, how many hours it lasts (1 to 48), and an optional one-line pitch.
+A second, optional box shows the top, heart and base notes (up to 10 per row, 30 characters each, typed as comma-separated text).
+They are stored in the `kind` and `details` (JSON) columns; the server checks them, and the shop shows them as plain text.
+
 Each product keeps **one original** (the uploaded photo, max 2400 px, `uploads/originals/`, never
 served publicly) and **one cropped shop picture** (max 1200 px, `uploads/products/`). Cropping again
 replaces the shop picture; the crop settings are saved so the crop screen reopens as it was. Both are
@@ -103,8 +108,9 @@ same disk when deploying (`npm run build` does not touch it).
 | PATCH  | `/api/admin/customers/:id` | `{ name, email }` (new email → unverified, logged out) |
 | DELETE | `/api/admin/customers/:id` | — (permanent; logs the customer out) |
 | GET    | `/api/products`, `/api/products/:id` | public shop: visible products only (`inStock`, no stock count); the list has no descriptions, `/:id` has |
-| GET/POST | `/api/admin/products` | admin: list all / `{ name, description, priceCents, stock, active }` |
+| GET/POST | `/api/admin/products` | admin: list all / `{ name, description, priceCents, stock, active, kind, details }` (`kind` = `perfume` or `other`; a perfume needs `details`: `{ inspiredBy, concentration, hoursMin, hoursMax, tagline, notes: { top, heart, base } }`) |
 | PATCH  | `/api/admin/products/:id/active` | `{ active }`: show or hide a product, changes nothing else |
+| POST   | `/api/admin/products/batch-delete` | `{ ids }` (1–100) → `{ deleted }`; removes the products and their picture files |
 | PATCH/DELETE | `/api/admin/products/:id` | admin: same body as create / delete (also removes its picture) |
 | PUT    | `/api/admin/products/:id/image?crop=x,y,w,h` | admin: raw JPG/PNG/WebP photo (`Content-Type: image/*`, max 30 MB); crop in percent, optional |
 | PUT    | `/api/admin/products/:id/crop` | admin: `{ x, y, width, height }` re-crops the saved original; replaces the shop picture |
