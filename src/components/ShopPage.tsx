@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ArrowLeft, ShoppingBag, Sparkles, X } from 'lucide-react';
 import type { Product } from '../types';
 import { formatPrice } from '../money';
@@ -9,6 +9,7 @@ export const ShopPage: React.FC = () => {
   const [products, setProducts] = useState<Product[] | null>(null);
   const [error, setError] = useState(false);
   const [open, setOpen] = useState<Product | null>(null);
+  const close = useCallback(() => setOpen(null), []);
 
   useEffect(() => {
     document.title = 'Shop — ScoopVerse';
@@ -89,7 +90,7 @@ export const ShopPage: React.FC = () => {
         )}
       </main>
 
-      {open && <ProductDetail product={open} onClose={() => setOpen(null)} />}
+      {open && <ProductDetail product={open} onClose={close} />}
     </div>
   );
 };
@@ -104,22 +105,56 @@ const ProductImage: React.FC<{ product: Product }> = ({ product }) =>
   );
 
 const ProductDetail: React.FC<{ product: Product; onClose: () => void }> = ({ product, onClose }) => {
+  // The list doesn't carry descriptions; this one product's comes when its pop-up opens.
+  const [description, setDescription] = useState<string | undefined>();
+  const dialogRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
+    fetch(`/api/products/${product.id}`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => setDescription(data?.product.description))
+      .catch(() => {});
+  }, [product.id]);
+
+  // Keyboard: focus moves into the pop-up, Tab stays inside it, Esc closes it, and focus goes back to the product that was clicked.
+  useEffect(() => {
+    const opener = document.activeElement as HTMLElement | null;
+    const dialog = dialogRef.current!;
+    dialog.focus();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') return onClose();
+      if (e.key !== 'Tab') return;
+      const items = dialog.querySelectorAll<HTMLElement>('button:not([disabled]), [tabindex="0"]');
+      const first = items[0];
+      const last = items[items.length - 1];
+      const here = document.activeElement;
+      if (e.shiftKey && (here === first || here === dialog)) {
+        last.focus();
+        e.preventDefault();
+      } else if (!e.shiftKey && here === last) {
+        first.focus();
+        e.preventDefault();
+      }
+    };
     window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      opener?.focus();
+    };
   }, [onClose]);
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto bg-[#2d2438]/30 backdrop-blur-sm" onClick={onClose}>
       <div className="min-h-full flex items-center justify-center p-4">
         <div
+          ref={dialogRef}
+          tabIndex={-1}
           role="dialog"
           aria-modal="true"
           aria-label={product.name}
           onClick={(e) => e.stopPropagation()}
           // 1296px wide on big screens; the text column is half the width, so the square picture is about 653px tall.
-          className="relative w-full max-w-[81rem] bg-white rounded-3xl overflow-hidden border border-white shadow-xl grid lg:grid-cols-[minmax(0,1fr)_49.6%]"
+          className="relative w-full max-w-[81rem] outline-hidden bg-white rounded-3xl overflow-hidden border border-white shadow-xl grid lg:grid-cols-[minmax(0,1fr)_49.6%]"
         >
           <button
             onClick={onClose}
@@ -141,12 +176,12 @@ const ProductDetail: React.FC<{ product: Product; onClose: () => void }> = ({ pr
               <p className="text-xl font-bold text-[#695282]">{formatPrice(product.priceCents)}</p>
             </div>
             {/* Already cleaned by the server (allow-listed tags only), so it is safe to show as HTML. */}
-            {product.description && (
+            {description && (
               <div
                 className="rich-text text-sm text-[#4a454e] leading-relaxed min-h-0 overflow-y-auto max-h-[max(6rem,20vh)] lg:max-h-none lg:flex-1 [scrollbar-gutter:stable] [scrollbar-width:thin] [scrollbar-color:#c9b6dc_transparent]"
                 tabIndex={0}
                 aria-label="Product description"
-                dangerouslySetInnerHTML={{ __html: product.description }}
+                dangerouslySetInnerHTML={{ __html: description }}
               />
             )}
             <div className="mt-auto pt-2 space-y-2 shrink-0">

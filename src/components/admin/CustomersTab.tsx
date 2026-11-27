@@ -16,6 +16,7 @@ interface Props {
 
 // Must match BATCH_MAX in server/admin.ts.
 const BATCH_MAX = 50;
+const RESET_MAX = 20; // must match RESET_MAX in server/admin.ts
 
 const inputClass =
   'w-full px-4 py-3 rounded-2xl bg-[#f7f3ed] border border-[#e6e2dc] focus:border-[#9d84b7] focus:bg-white focus:outline-hidden text-sm transition-all text-[#1c1c18] placeholder-[#7b757e]';
@@ -199,13 +200,15 @@ export const CustomersTab: React.FC<Props> = ({ onSessionExpired }) => {
           <button onClick={() => setSelected(new Map())} className="text-sm font-semibold text-[#d9c8ec] hover:text-white underline underline-offset-2">
             Clear
           </button>
-          {selected.size > BATCH_MAX && (
+          {selected.size > BATCH_MAX ? (
             <span className="text-xs text-[#ffd1b3]">Batch actions work on up to {BATCH_MAX} customers at a time.</span>
+          ) : (
+            selected.size > RESET_MAX && <span className="text-xs text-[#ffd1b3]">Password resets work on up to {RESET_MAX} customers at a time.</span>
           )}
           <div className="flex gap-2 ml-auto">
             <button
               onClick={() => setBatch('reset')}
-              disabled={selected.size > BATCH_MAX}
+              disabled={selected.size > RESET_MAX}
               className="inline-flex items-center gap-2 text-sm font-bold bg-white/10 hover:bg-white/20 disabled:opacity-40 disabled:cursor-not-allowed px-4 py-2 rounded-full transition-all"
             >
               <KeyRound className="w-4 h-4 text-[#ffd1b3]" />

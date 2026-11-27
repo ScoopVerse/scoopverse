@@ -1,6 +1,0 @@
-{
-  "name": "ScoopVerse - Mystery Fragrance Scoops",
-  "description": "A magical, boutique under-development & mystery scoop reveal experience for luxury fragrance discovery.",
-  "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
-}

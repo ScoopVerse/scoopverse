@@ -12,11 +12,11 @@ export interface Admin {
   name: string;
 }
 
-// What the public shop sees.
+// What the public shop sees. The description comes only with the single-product request, not the list.
 export interface Product {
   id: string;
   name: string;
-  description: string;
+  description?: string;
   priceCents: number;
   inStock: boolean;
   imageUrl: string | null;

@@ -102,14 +102,15 @@ same disk when deploying (`npm run build` does not touch it).
 | GET    | `/api/admin/customers?q=&offset=` | — → `{ customers, total, pageSize }` |
 | PATCH  | `/api/admin/customers/:id` | `{ name, email }` (new email → unverified, logged out) |
 | DELETE | `/api/admin/customers/:id` | — (permanent; logs the customer out) |
-| GET    | `/api/products`, `/api/products/:id` | public shop: visible products only (`inStock`, no stock count) |
+| GET    | `/api/products`, `/api/products/:id` | public shop: visible products only (`inStock`, no stock count); the list has no descriptions, `/:id` has |
 | GET/POST | `/api/admin/products` | admin: list all / `{ name, description, priceCents, stock, active }` |
+| PATCH  | `/api/admin/products/:id/active` | `{ active }`: show or hide a product, changes nothing else |
 | PATCH/DELETE | `/api/admin/products/:id` | admin: same body as create / delete (also removes its picture) |
 | PUT    | `/api/admin/products/:id/image?crop=x,y,w,h` | admin: raw JPG/PNG/WebP photo (`Content-Type: image/*`, max 30 MB); crop in percent, optional |
 | PUT    | `/api/admin/products/:id/crop` | admin: `{ x, y, width, height }` re-crops the saved original; replaces the shop picture |
 | GET    | `/api/admin/products/:id/original` | admin only: the full saved photo (for the crop screen) |
 | POST   | `/api/admin/customers/batch-delete` | `{ ids }` (1–50) → `{ deleted }` |
-| POST   | `/api/admin/customers/batch-reset` | `{ ids }` (1–50) → `{ sent, failed }`; 10 requests per 15 min |
+| POST   | `/api/admin/customers/batch-reset` | `{ ids }` (1–20) → `{ sent, failed }`; 10 requests per 15 min |
 
 Passwords are hashed with Argon2id. Sessions live in Postgres and are referenced by an
 `httpOnly`, `SameSite=Lax` cookie (`sv.sid`), `Secure` in production.

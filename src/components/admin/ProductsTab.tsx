@@ -18,11 +18,6 @@ const inputClass =
   'w-full px-4 py-3 rounded-2xl bg-[#f7f3ed] border border-[#e6e2dc] focus:border-[#9d84b7] focus:bg-white focus:outline-hidden text-sm transition-all text-[#1c1c18] placeholder-[#7b757e]';
 const labelClass = 'text-xs font-bold uppercase tracking-wider text-[#7b757e] block';
 
-const productBody = (p: AdminProduct, changes: Partial<AdminProduct> = {}) => {
-  const m = { ...p, ...changes };
-  return { name: m.name, description: m.description, priceCents: m.priceCents, stock: m.stock, active: m.active };
-};
-
 async function sendJson(method: string, url: string, body?: unknown) {
   const res = await fetch(url, {
     method,
@@ -62,7 +57,7 @@ export const ProductsTab: React.FC<Props> = ({ onSessionExpired }) => {
     setBusyId(p.id);
     setError(null);
     try {
-      const { res, data } = await sendJson('PATCH', `/api/admin/products/${p.id}`, productBody(p, { active: !p.active }));
+      const { res, data } = await sendJson('PATCH', `/api/admin/products/${p.id}/active`, { active: !p.active });
       if (res.status === 401) return onSessionExpired();
       if (!res.ok) return setError(data.error ?? 'Something went wrong. Please try again.');
       upsert(data.product);

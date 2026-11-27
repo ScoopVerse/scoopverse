@@ -217,14 +217,16 @@ adminRouter.delete('/customers/:id', async (req, res) => {
 // --- Batch actions on ticked customers ---
 
 // Body { ids: ["1", "2", ...] }: 1 to BATCH_MAX customer ids, duplicates removed.
-function batchIds(body: unknown): string[] | null {
+function batchIds(body: unknown, max = BATCH_MAX): string[] | null {
   const ids = (body as { ids?: unknown })?.ids;
   if (!Array.isArray(ids) || ids.length === 0) return null;
   if (!ids.every((id) => typeof id === 'string' && /^\d{1,18}$/.test(id))) return null;
   const unique = [...new Set(ids as string[])];
-  return unique.length <= BATCH_MAX ? unique : null;
+  return unique.length <= max ? unique : null;
 }
 const BATCH_ERROR = `Select between 1 and ${BATCH_MAX} customers.`;
+// Resets are emailed one by one while the admin waits; more than this can outlast a proxy's 60 second timeout.
+const RESET_MAX = 20;
 
 adminRouter.post('/customers/batch-delete', async (req, res) => {
   const ids = batchIds(req.body);
@@ -248,8 +250,8 @@ adminRouter.post('/customers/batch-delete', async (req, res) => {
 const batchResetLimiter = limiter(10, 15, 'Too many batch password reset requests.');
 
 adminRouter.post('/customers/batch-reset', batchResetLimiter, async (req, res) => {
-  const ids = batchIds(req.body);
-  if (!ids) return res.status(400).json({ error: BATCH_ERROR });
+  const ids = batchIds(req.body, RESET_MAX);
+  if (!ids) return res.status(400).json({ error: `Select between 1 and ${RESET_MAX} customers to send password resets.` });
   const { rows } = await pool.query<{ id: string; email: string; name: string }>(
     'SELECT id, email, name FROM users WHERE id = ANY($1::bigint[])',
     [ids],

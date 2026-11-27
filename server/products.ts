@@ -41,11 +41,12 @@ const adminProduct = (p: ProductRow) => ({
   hasOriginal: p.image_original !== null,
   crop: p.image_crop,
 });
-// What the public shop sees: no stock count, only whether it can be bought.
-const publicProduct = (p: ProductRow) => ({
+// What the public shop sees: no stock count, only whether it can be bought. The list leaves descriptions out
+// (the grid doesn't show them); the single-product route includes it.
+const publicProduct = (p: ProductRow, withDescription = false) => ({
   id: p.id,
   name: p.name,
-  description: p.description,
+  ...(withDescription && { description: p.description }),
   priceCents: p.price_cents,
   inStock: p.stock > 0,
   imageUrl: imageUrl(p),
@@ -152,6 +153,14 @@ productsAdminRouter.patch('/:id', async (req, res) => {
   res.json({ product: adminProduct(rows[0]) });
 });
 
+// The visible/hidden switch changes only that column, so it can never write old stock or price back.
+productsAdminRouter.patch('/:id/active', async (req, res) => {
+  if (typeof req.body?.active !== 'boolean') return res.status(400).json({ error: 'Please choose whether the product is visible in the shop.' });
+  const { rows } = await pool.query<ProductRow>(`UPDATE products SET active = $2 WHERE id = $1 RETURNING ${COLUMNS}`, [req.params.id, req.body.active]);
+  if (!rows[0]) return res.status(404).json({ error: NOT_FOUND });
+  res.json({ product: adminProduct(rows[0]) });
+});
+
 // The photo is sent as the raw file (Content-Type: image/*), optionally with ?crop=x,y,width,height (percent of the
 // photo). It is decoded, checked and re-saved as WebP under random names, so what was uploaded is never served as-is:
 // one private original (max 2400 px) and one public shop picture (the crop, max 1200 px).
@@ -192,10 +201,18 @@ productsAdminRouter.put('/:id/image', express.raw({ type: 'image/*', limit: UPLO
   await fs.mkdir(ORIGINAL_DIR, { recursive: true });
   await fs.writeFile(path.join(PRODUCT_DIR, shopFile), shop);
   await fs.writeFile(path.join(ORIGINAL_DIR, originalFile), original);
-  const { rows } = await pool.query<ProductRow>(
-    `UPDATE products SET image = $2, image_original = $3, image_crop = $4 WHERE id = $1 RETURNING ${COLUMNS}`,
-    [req.params.id, shopFile, originalFile, crop && JSON.stringify(crop)],
-  );
+  const { rows } = await pool
+    .query<ProductRow>(`UPDATE products SET image = $2, image_original = $3, image_crop = $4 WHERE id = $1 RETURNING ${COLUMNS}`, [
+      req.params.id,
+      shopFile,
+      originalFile,
+      crop && JSON.stringify(crop),
+    ])
+    .catch(async (err) => {
+      // The database refused: don't leave the new files behind with nothing pointing at them.
+      await Promise.all([removeFile(PRODUCT_DIR, shopFile), removeFile(ORIGINAL_DIR, originalFile)]);
+      throw err;
+    });
   if (!rows[0]) {
     // product was deleted while uploading
     await Promise.all([removeFile(PRODUCT_DIR, shopFile), removeFile(ORIGINAL_DIR, originalFile)]);
@@ -221,10 +238,12 @@ productsAdminRouter.put('/:id/crop', async (req, res) => {
   const shop = await renderShopImage(await fs.readFile(path.join(ORIGINAL_DIR, existing.rows[0].image_original)), crop);
   const shopFile = newName(); // new name, because shop pictures are cached for good
   await fs.writeFile(path.join(PRODUCT_DIR, shopFile), shop);
-  const { rows } = await pool.query<ProductRow>(
-    `UPDATE products SET image = $2, image_crop = $3 WHERE id = $1 RETURNING ${COLUMNS}`,
-    [req.params.id, shopFile, JSON.stringify(crop)],
-  );
+  const { rows } = await pool
+    .query<ProductRow>(`UPDATE products SET image = $2, image_crop = $3 WHERE id = $1 RETURNING ${COLUMNS}`, [req.params.id, shopFile, JSON.stringify(crop)])
+    .catch(async (err) => {
+      await removeFile(PRODUCT_DIR, shopFile);
+      throw err;
+    });
   if (!rows[0]) {
     await removeFile(PRODUCT_DIR, shopFile);
     return res.status(404).json({ error: NOT_FOUND });
@@ -256,12 +275,12 @@ export const productsPublicRouter = Router();
 
 productsPublicRouter.get('/', async (_req, res) => {
   const { rows } = await pool.query<ProductRow>(`SELECT ${COLUMNS} FROM products WHERE active ORDER BY created_at DESC, id DESC`);
-  res.json({ products: rows.map(publicProduct) });
+  res.json({ products: rows.map((p) => publicProduct(p)) });
 });
 
 productsPublicRouter.get('/:id', async (req, res) => {
   if (!/^\d{1,18}$/.test(req.params.id)) return res.status(404).json({ error: NOT_FOUND });
   const { rows } = await pool.query<ProductRow>(`SELECT ${COLUMNS} FROM products WHERE id = $1 AND active`, [req.params.id]);
   if (!rows[0]) return res.status(404).json({ error: NOT_FOUND });
-  res.json({ product: publicProduct(rows[0]) });
+  res.json({ product: publicProduct(rows[0], true) });
 });
