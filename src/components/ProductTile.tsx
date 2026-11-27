@@ -2,6 +2,7 @@ import React from 'react';
 import { Sparkles } from 'lucide-react';
 import type { Product } from '../types';
 import { formatPrice } from '../money';
+import { FramedImage } from './FramedImage';
 
 interface Props {
   product: Product;
@@ -21,12 +22,7 @@ export const ProductTile: React.FC<Props> = ({ product: p, href, onOpen, eager, 
     <>
       <span className="relative block aspect-square overflow-hidden rounded-card bg-paper-2">
         {p.imageUrl ? (
-          <img
-            src={p.imageUrl}
-            alt={p.name}
-            loading={eager ? "eager" : "lazy"}
-            className={`h-full w-full object-cover ${p.inStock ? '' : 'opacity-60'}`}
-          />
+          <FramedImage src={p.imageUrl} alt={p.name} eager={eager} className={p.inStock ? '' : 'opacity-60'} />
         ) : (
           <span className="grid h-full w-full place-items-center text-accent">
             <Sparkles className="h-10 w-10" aria-hidden />

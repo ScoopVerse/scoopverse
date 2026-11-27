@@ -8,6 +8,7 @@ import { AuthModal } from './AuthModal';
 import { SiteNav } from './SiteNav';
 import { SiteFooter } from './SiteFooter';
 import { ProductTile } from './ProductTile';
+import { FramedImage } from './FramedImage';
 import { LegendBeads, LegendModal } from './Legend';
 
 type Filter = 'all' | 'perfume' | 'scoop' | 'other';
@@ -188,7 +189,7 @@ export const ShopPage: React.FC = () => {
 
 const ProductImage: React.FC<{ product: Product; src: string | null }> = ({ product, src }) =>
   src ? (
-    <img src={src} alt={product.name} className={`h-full w-full object-cover ${product.inStock ? '' : 'opacity-60'}`} />
+    <FramedImage src={src} alt={product.name} eager className={product.inStock ? '' : 'opacity-60'} />
   ) : (
     <div className="flex h-full w-full items-center justify-center bg-paper-3 text-accent">
       <Sparkles className="h-10 w-10" aria-hidden />
@@ -429,7 +430,7 @@ const ProductDetail: React.FC<{ product: Product; onClose: () => void; live: boo
                         aria-current={i === shot}
                         className={`block h-11 w-11 overflow-hidden rounded-full border-2 transition-colors ${i === shot ? 'border-accent' : 'border-transparent hover:border-rule'}`}
                       >
-                        <img src={src} alt="" className="h-full w-full object-cover" />
+                        <img src={src} alt="" className="h-full w-full bg-paper-2 object-contain" />
                       </button>
                     </li>
                   ))}

@@ -3,7 +3,7 @@ import Cropper from 'react-easy-crop';
 import { Check, X, ZoomIn, ZoomOut } from 'lucide-react';
 import type { CropArea } from '../../types';
 
-// The shop shows square pictures, so the crop is always a square.
+// Two choices: the whole picture (nothing cut off; the shop fills the empty space) or a square crop.
 interface Props {
   file: File; // the full photo
   initialArea: CropArea | null; // the crop used last time, so zoom and position come back as they were
@@ -18,6 +18,8 @@ export const ImageCropper: React.FC<Props> = ({ file, initialArea, onCancel, onD
   const [crop, setCrop] = useState({ x: 0, y: 0 });
   const [zoom, setZoom] = useState(1);
   const [area, setArea] = useState<CropArea | null>(null);
+  // New uploads start as the whole picture; reopening a saved crop starts as it was saved.
+  const [whole, setWhole] = useState(!initialArea || (initialArea.width >= 100 && initialArea.height >= 100));
 
   useEffect(() => {
     const url = URL.createObjectURL(file);
@@ -45,11 +47,26 @@ export const ImageCropper: React.FC<Props> = ({ file, initialArea, onCancel, onD
           </button>
           <div className="space-y-1 pr-10">
             <h2 className="font-serif-display text-2xl font-bold">Crop picture</h2>
-            <p className="text-sm text-[#7b757e]">Drag to move. The square is what shoppers will see.</p>
+            <p className="text-sm text-[#7b757e]">{whole ? 'Shoppers will see the whole picture.' : 'Drag to move. The square is what shoppers will see.'}</p>
+          </div>
+
+          <div className="flex gap-2" role="group" aria-label="Picture size">
+            {[[true, 'Whole picture'], [false, 'Square crop']].map(([v, label]) => (
+              <button
+                key={String(v)}
+                type="button"
+                aria-pressed={whole === v}
+                onClick={() => setWhole(v as boolean)}
+                className={`text-sm font-bold px-4 py-2 rounded-full border transition-all ${whole === v ? 'bg-[#695282] text-white border-[#695282]' : 'text-[#4a454e] border-[#d9d2dc] hover:bg-[#efdbff]/50'}`}
+              >
+                {label as string}
+              </button>
+            ))}
           </div>
 
           <div className="relative w-full aspect-square rounded-2xl overflow-hidden bg-[#2d2438]">
-            {src && (
+            {src && whole && <img src={src} alt="" className="h-full w-full object-contain" />}
+            {src && !whole && (
               <Cropper
                 image={src}
                 crop={crop}
@@ -65,7 +82,7 @@ export const ImageCropper: React.FC<Props> = ({ file, initialArea, onCancel, onD
             )}
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className={`flex items-center gap-3 ${whole ? 'invisible' : ''}`}>
             <ZoomOut className="w-4 h-4 text-[#7b757e] shrink-0" aria-hidden />
             <input
               type="range"
@@ -87,12 +104,12 @@ export const ImageCropper: React.FC<Props> = ({ file, initialArea, onCancel, onD
             </button>
             <button
               type="button"
-              onClick={() => area && onDone(area)}
-              disabled={!area}
+              onClick={() => (whole ? onDone({ x: 0, y: 0, width: 100, height: 100 }) : area && onDone(area))}
+              disabled={!whole && !area}
               className="inline-flex items-center gap-2 text-sm font-bold text-white bg-[#695282] hover:bg-[#533d6b] disabled:opacity-60 px-6 py-2 rounded-full shadow-sm transition-all"
             >
               <Check className="w-4 h-4 text-[#ffd1b3]" />
-              Use this crop
+              {whole ? 'Use whole picture' : 'Use this crop'}
             </button>
           </div>
         </div>

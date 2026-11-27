@@ -286,7 +286,7 @@ export const ProductsTab: React.FC<Props> = ({ onSessionExpired }) => {
 
 const Thumb: React.FC<{ url: string | null; className?: string }> = ({ url, className = '' }) =>
   url ? (
-    <img src={url} alt="" loading="lazy" draggable={false} className={`object-cover rounded-2xl bg-[#f7f3ed] ${className}`} />
+    <img src={url} alt="" loading="lazy" draggable={false} className={`object-contain rounded-2xl bg-[#f7f3ed] ${className}`} />
   ) : (
     <span className={`rounded-2xl bg-[#f7f3ed] border border-dashed border-[#d9d2dc] text-[#b9b2bd] flex items-center justify-center ${className}`}>
       <ImagePlus className="w-5 h-5" />
@@ -294,7 +294,10 @@ const Thumb: React.FC<{ url: string | null; className?: string }> = ({ url, clas
   );
 
 // Shows the chosen square of a photo (crop is in percent of the photo) without making a new file.
-const CropPreview: React.FC<{ url: string; crop: CropArea; className?: string }> = ({ url, crop, className = '' }) => (
+const CropPreview: React.FC<{ url: string; crop: CropArea; className?: string }> = ({ url, crop, className = '' }) =>
+  crop.width >= 100 && crop.height >= 100 ? (
+    <Thumb url={url} className={className} />
+  ) : (
   <span className={`relative block overflow-hidden rounded-2xl bg-[#f7f3ed] ${className}`}>
     <img
       src={url}
@@ -304,7 +307,7 @@ const CropPreview: React.FC<{ url: string; crop: CropArea; className?: string }>
       style={{ width: `${10000 / crop.width}%`, left: `${(-crop.x / crop.width) * 100}%`, top: `${(-crop.y / crop.height) * 100}%` }}
     />
   </span>
-);
+  );
 
 interface FormProps {
   product: AdminProduct | null; // null = adding a new one
