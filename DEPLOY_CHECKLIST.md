@@ -45,6 +45,8 @@ first (e.g. `test.scoopverse.asia`).
 - [ ] Get the code: `git clone` of `ScoopVerse/scoopverse` (branch `main` after merging
       `feature/auth`). Then `npm ci` **on the server**. `argon2` and `sharp` are native
       packages: they must be installed on the server's own OS, never copied from the PC.
+- [ ] The first start on the server runs the one-time description conversion in `server/db.ts`; it only touches
+      descriptions that are not yet formatted text, so it is safe to run again.
 - [ ] Keep dev dependencies installed (plain `npm ci`, not `--omit=dev`), because
       `npm run admin:create` runs through `tsx`, which is a dev dependency.
 - [ ] `npm run build` (makes `dist/` and `server.js`), then `npm start`.

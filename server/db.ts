@@ -74,5 +74,10 @@ export async function migrate() {
     -- The full uploaded photo (file name in uploads/originals/, never public) and the crop applied to it, in percent.
     ALTER TABLE products ADD COLUMN IF NOT EXISTS image_original TEXT;
     ALTER TABLE products ADD COLUMN IF NOT EXISTS image_crop JSONB;
+    -- Descriptions used to be plain text; they are now formatted text (HTML). Convert the old ones once:
+    -- escape what HTML treats specially, drop carriage returns, turn line breaks into <br>.
+    UPDATE products SET description = '<p>' || replace(replace(replace(replace(replace(trim(description),
+        '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), chr(13), ''), chr(10), '<br>') || '</p>'
+      WHERE description <> '' AND description !~ '^<(p|ul|ol)[ >]';
   `);
 }

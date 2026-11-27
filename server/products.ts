@@ -3,6 +3,7 @@ import path from 'node:path';
 import { randomBytes } from 'node:crypto';
 import express, { Router } from 'express';
 import sharp from 'sharp';
+import sanitizeHtml from 'sanitize-html';
 import { pool } from './db';
 
 // products/ = the cropped pictures the shop shows (public). originals/ = the full uploaded photos, kept so a
@@ -50,6 +51,27 @@ const publicProduct = (p: ProductRow) => ({
   imageUrl: imageUrl(p),
 });
 
+// Descriptions are formatted text (HTML from the editor) shown to every shopper, so only a short allow-list of
+// tags survives: a stored description can never carry a script, an event handler, a link or an image.
+const FONT_FAMILY_OK = /^[\w\s,"'-]{1,120}$/; // names and commas only: nothing that could close the style or add another
+const FONT_SIZE_OK = /^\d{1,3}(\.\d{1,3})?(rem|em|px|%)$/;
+const DESCRIPTION_MAX = 10_000; // characters of cleaned HTML
+
+function cleanDescription(html: string) {
+  const clean = sanitizeHtml(html, {
+    allowedTags: ['p', 'br', 'strong', 'em', 'u', 'ul', 'ol', 'li', 'span'],
+    allowedAttributes: { span: ['style'] },
+    allowedStyles: { span: { 'font-family': [FONT_FAMILY_OK], 'font-size': [FONT_SIZE_OK] } },
+  })
+    .replace(/(<p><\/p>|<p><br \/><\/p>)+$/, '') // empty lines left at the end by the editor
+    .trim();
+  // Nothing readable left (e.g. only empty paragraphs): store no description.
+  if (!sanitizeHtml(clean, { allowedTags: [], allowedAttributes: {} }).trim()) return '';
+  // The editor always sends blocks; plain text from elsewhere is wrapped so every stored description has one form
+  // (the one-time conversion in db.ts looks for exactly that). shortcut: assumes no loose inline tags before a block.
+  return /^<(p|ul|ol)[ >]/.test(clean) ? clean : `<p>${clean}</p>`;
+}
+
 const removeFile = (dir: string, file: string | null) => (file ? fs.rm(path.join(dir, file), { force: true }) : undefined);
 
 // A crop is { x, y, width, height } in percent of the original, as the admin's crop screen reports it.
@@ -81,10 +103,10 @@ const newName = () => `${randomBytes(12).toString('hex')}.webp`;
 
 function parseProduct(body: any) {
   const name = String(body?.name ?? '').trim();
-  const description = String(body?.description ?? '').trim();
+  const description = cleanDescription(String(body?.description ?? ''));
   const { priceCents, stock, active } = body ?? {};
   if (!name || name.length > 120) return { error: 'Please enter a product name (max 120 characters).' };
-  if (description.length > 2000) return { error: 'The description is too long (max 2000 characters).' };
+  if (description.length > DESCRIPTION_MAX) return { error: 'The description is too long. Please shorten it.' };
   if (!Number.isInteger(priceCents) || priceCents < 1 || priceCents > 99_999_999) {
     return { error: 'The price must be between 0.01 and 999,999.99.' };
   }

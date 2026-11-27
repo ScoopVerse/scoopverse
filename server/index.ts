@@ -21,7 +21,7 @@ const app = express();
 // Behind nginx / a reverse proxy on the server, so secure cookies work over HTTPS.
 if (isProd) app.set('trust proxy', 1);
 
-app.use(express.json({ limit: '10kb' }));
+app.use(express.json({ limit: '64kb' })); // product descriptions are the biggest bodies (up to 10,000 characters of formatted text)
 
 // CSRF guard: state-changing API calls must be JSON. Cross-site HTML forms
 // can't send application/json without a CORS preflight, which we never allow.

@@ -4,6 +4,7 @@ import type { AdminProduct, CropArea } from '../../types';
 import { centsToDollars, dollarsToCents, formatPrice } from '../../money';
 import { Dialog } from './CustomersTab';
 import { ImageCropper } from './ImageCropper';
+import { RichTextEditor } from './RichTextEditor';
 
 interface Props {
   // Called when the server says the admin session has ended.
@@ -390,8 +391,8 @@ const ProductForm: React.FC<FormProps> = ({ product, onClose, onSaved, onChanged
             <input id="product-name" required maxLength={120} value={name} onChange={(e) => setName(e.target.value)} className={inputClass} placeholder="e.g. Midnight Vanilla Scoop" />
           </div>
           <div className="space-y-2">
-            <label htmlFor="product-description" className={labelClass}>Description</label>
-            <textarea id="product-description" rows={4} maxLength={2000} value={description} onChange={(e) => setDescription(e.target.value)} className={`${inputClass} resize-y`} placeholder="What makes this one special?" />
+            <span className={labelClass}>Description</span>
+            <RichTextEditor value={description} onChange={setDescription} />
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">

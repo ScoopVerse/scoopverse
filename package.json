@@ -18,6 +18,10 @@
   "dependencies": {
     "@google/genai": "^2.4.0",
     "@tailwindcss/vite": "^4.1.14",
+    "@tiptap/extension-text-style": "^3.35.0",
+    "@tiptap/pm": "^3.35.0",
+    "@tiptap/react": "^3.35.0",
+    "@tiptap/starter-kit": "^3.35.0",
     "@vitejs/plugin-react": "^5.0.4",
     "argon2": "^0.45.2",
     "connect-pg-simple": "^10.0.0",
@@ -32,6 +36,7 @@
     "react": "^19.0.1",
     "react-dom": "^19.0.1",
     "react-easy-crop": "^6.2.5",
+    "sanitize-html": "^2.18.2",
     "sharp": "^0.35.5",
     "vite": "^6.2.3"
   },
@@ -42,6 +47,7 @@
     "@types/node": "^22.14.0",
     "@types/nodemailer": "^8.0.2",
     "@types/pg": "^8.23.1",
+    "@types/sanitize-html": "^2.16.2",
     "autoprefixer": "^10.4.21",
     "esbuild": "^0.25.0",
     "tailwindcss": "^4.1.14",

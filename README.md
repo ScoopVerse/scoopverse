@@ -72,6 +72,11 @@ per 15 min. Every admin API route except login/logout requires an admin session.
 `/shop` lists the products marked Visible in Admin → Products (it is not linked from the
 homepage yet, and sends `noindex`). Prices are stored as whole cents (SGD).
 
+Product descriptions are formatted text (bold, italic, underline, font, size, lists), written in the
+admin's text editor (Tiptap) and stored as HTML. The server cleans every description before saving
+(`sanitize-html`): only those tags and font/size styles survive, so a description can't carry a script,
+link or image. Old plain-text descriptions were converted once at startup.
+
 Each product keeps **one original** (the uploaded photo, max 2400 px, `uploads/originals/`, never
 served publicly) and **one cropped shop picture** (max 1200 px, `uploads/products/`). Cropping again
 replaces the shop picture; the crop settings are saved so the crop screen reopens as it was. Both are

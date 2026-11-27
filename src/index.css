@@ -81,3 +81,34 @@
   box-shadow: 0 12px 30px -5px rgba(105, 82, 130, 0.12);
 }
 
+
+/* Formatted product descriptions: the editor in the admin form and the text in the /shop pop-up share these. */
+.rich-text {
+  overflow-wrap: anywhere;
+}
+.rich-text p {
+  margin: 0 0 0.5em;
+  white-space: pre-wrap; /* keep the spaces and line breaks as typed */
+}
+.rich-text p:last-child,
+.rich-text li > p {
+  margin-bottom: 0;
+}
+.rich-text ul,
+.rich-text ol {
+  margin: 0.5em 0;
+  padding-left: 1.5rem;
+}
+.rich-text ul {
+  list-style: disc;
+}
+.rich-text ol {
+  list-style: decimal;
+}
+.rich-text u {
+  text-decoration: underline;
+}
+/* A blank line (an empty paragraph) takes a full line in the editor; without this it collapses to nothing in the shop. */
+.rich-text p:empty::before {
+  content: '\200b';
+}

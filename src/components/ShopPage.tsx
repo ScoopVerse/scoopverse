@@ -118,7 +118,8 @@ const ProductDetail: React.FC<{ product: Product; onClose: () => void }> = ({ pr
           aria-modal="true"
           aria-label={product.name}
           onClick={(e) => e.stopPropagation()}
-          className="relative w-full max-w-3xl bg-white rounded-3xl overflow-hidden border border-white shadow-xl grid md:grid-cols-2"
+          // 1296px wide on big screens; the text column is half the width, so the square picture is about 653px tall.
+          className="relative w-full max-w-[81rem] bg-white rounded-3xl overflow-hidden border border-white shadow-xl grid lg:grid-cols-[minmax(0,1fr)_49.6%]"
         >
           <button
             onClick={onClose}
@@ -127,19 +128,28 @@ const ProductDetail: React.FC<{ product: Product; onClose: () => void }> = ({ pr
           >
             <X className="w-4 h-4" />
           </button>
-          <div className="aspect-square md:aspect-auto md:min-h-[24rem] bg-[#f7f3ed]">
+          {/* Always square, so the picture is never stretched however long the text is. */}
+          <div className="aspect-square bg-[#f7f3ed]">
             <ProductImage product={product} />
           </div>
-          <div className="p-6 sm:p-8 flex flex-col gap-4 min-w-0">
-            <div className="space-y-2">
-              <h2 className="font-serif-display text-3xl font-bold leading-tight pr-8 md:pr-0 [overflow-wrap:anywhere]">{product.name}</h2>
+          {/* Wide screens: this column is exactly as tall as the picture (the content is laid over it), so the pop-up never
+              grows with the text; the description scrolls instead. Narrow screens: stacked, description height capped. */}
+          <div className="relative min-w-0">
+          <div className="p-6 sm:p-8 flex flex-col gap-4 lg:absolute lg:inset-0">
+            <div className="space-y-2 shrink-0">
+              <h2 className="font-serif-display text-3xl font-bold leading-tight pr-8 lg:pr-0 [overflow-wrap:anywhere]">{product.name}</h2>
               <p className="text-xl font-bold text-[#695282]">{formatPrice(product.priceCents)}</p>
             </div>
-            {/* pre-wrap shows the description as typed (line breaks and spaces); anywhere-wrapping stops one very long line running off the card. */}
+            {/* Already cleaned by the server (allow-listed tags only), so it is safe to show as HTML. */}
             {product.description && (
-              <p className="text-sm text-[#4a454e] leading-relaxed whitespace-pre-wrap [overflow-wrap:anywhere]">{product.description}</p>
+              <div
+                className="rich-text text-sm text-[#4a454e] leading-relaxed min-h-0 overflow-y-auto max-h-[max(6rem,20vh)] lg:max-h-none lg:flex-1 [scrollbar-gutter:stable] [scrollbar-width:thin] [scrollbar-color:#c9b6dc_transparent]"
+                tabIndex={0}
+                aria-label="Product description"
+                dangerouslySetInnerHTML={{ __html: product.description }}
+              />
             )}
-            <div className="mt-auto pt-2 space-y-2">
+            <div className="mt-auto pt-2 space-y-2 shrink-0">
               <button
                 disabled
                 className="w-full py-4 rounded-2xl bg-[#c9c3cc] text-white font-bold text-sm cursor-not-allowed flex items-center justify-center gap-2"
@@ -149,6 +159,7 @@ const ProductDetail: React.FC<{ product: Product; onClose: () => void }> = ({ pr
               </button>
               {product.inStock && <p className="text-xs text-center text-[#7b757e]">Ordering opens soon.</p>}
             </div>
+          </div>
           </div>
         </div>
       </div>
