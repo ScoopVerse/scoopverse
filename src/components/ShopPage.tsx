@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronLeft, ChevronRight, Clock, Droplets, Package, Radio, ShoppingBag, Sparkles, X } from 'lucide-react';
-import type { PerfumeDetails, PerfumeNotes, Product, ScoopDetails } from '../types';
+import { ChevronLeft, ChevronRight, Clock, Droplets, Package, Radio, Users, ShoppingBag, Sparkles, X } from 'lucide-react';
+import { GENDER_LABEL, type Gender, type PerfumeDetails, type PerfumeNotes, type Product, type ScoopDetails } from '../types';
 import { formatPrice } from '../money';
 import { useAccount } from '../useAccount';
 import { useLive } from '../useLive';
@@ -30,6 +30,7 @@ export const ShopPage: React.FC = () => {
   const [products, setProducts] = useState<Product[] | null>(null);
   const [error, setError] = useState(false);
   const [filter, setFilter] = useState<Filter>('all');
+  const [gender, setGender] = useState<Gender | null>(null);
   const [sort, setSort] = useState<Sort>('newest');
   const [openId, setOpenId] = useState<string | null>(hashId);
   const live = useLive();
@@ -63,14 +64,25 @@ export const ShopPage: React.FC = () => {
     for (const p of products ?? []) c[p.kind === 'perfume' || p.kind === 'scoop' ? p.kind : 'other']++;
     return c;
   }, [products]);
+  const genderCounts = useMemo(() => {
+    const c: Record<Gender, number> = { women: 0, men: 0, unisex: 0 };
+    for (const p of products ?? []) if (p.kind === 'perfume' && p.details?.gender) c[p.details.gender]++;
+    return c;
+  }, [products]);
+  const genders = (Object.keys(genderCounts) as Gender[]).filter((g) => genderCounts[g] > 0);
+  // Only perfumes have a "for" tag, so choosing a type without them drops the tag.
+  const pickType = (f: Filter) => {
+    setFilter(f);
+    if (f === 'scoop' || f === 'other') setGender(null);
+  };
   const filters = FILTERS.filter((f) => f.key === 'all' || counts[f.key] > 0);
 
   const shown = useMemo(() => {
-    const list = (products ?? []).filter((p) => filter === 'all' || (filter === 'other' ? p.kind !== 'perfume' && p.kind !== 'scoop' : p.kind === filter));
+    const list = (products ?? []).filter((p) => (!gender || (p.kind === 'perfume' && p.details?.gender === gender)) && (filter === 'all' || (filter === 'other' ? p.kind !== 'perfume' && p.kind !== 'scoop' : p.kind === filter)));
     if (sort === 'price-asc') return [...list].sort((a, b) => a.priceCents - b.priceCents);
     if (sort === 'price-desc') return [...list].sort((a, b) => b.priceCents - a.priceCents);
     return list;
-  }, [products, filter, sort]);
+  }, [products, filter, gender, sort]);
 
   const openProduct = products?.find((p) => p.id === openId) ?? null;
 
@@ -94,7 +106,7 @@ export const ShopPage: React.FC = () => {
                       key={f.key}
                       type="button"
                       aria-pressed={filter === f.key}
-                      onClick={() => setFilter(f.key)}
+                      onClick={() => pickType(f.key)}
                       className="inline-flex min-h-11 items-center gap-1.5 border-b-2 border-transparent px-2 font-semibold text-ink-2 transition-colors hover:text-accent aria-pressed:border-accent aria-pressed:text-ink"
                     >
                       {f.label}
@@ -123,6 +135,25 @@ export const ShopPage: React.FC = () => {
                 </label>
               </div>
             </div>
+            {genders.length > 0 && (
+              <div className="page-wrap flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-rule py-2">
+                <span className="text-sm text-muted">Perfumes for</span>
+                <div role="group" aria-label="Filter perfumes by who they are for" className="flex flex-wrap gap-2">
+                  {([null, ...genders] as (Gender | null)[]).map((g) => (
+                    <button
+                      key={g ?? 'everyone'}
+                      type="button"
+                      aria-pressed={gender === g}
+                      onClick={() => setGender(g)}
+                      className="inline-flex min-h-11 items-center gap-1.5 rounded-full border border-rule px-4 text-sm font-semibold text-ink-2 transition-colors hover:border-accent hover:text-accent aria-pressed:border-ink aria-pressed:bg-ink aria-pressed:text-paper"
+                    >
+                      {g ? GENDER_LABEL[g] : 'Everyone'}
+                      {g && <span className="num font-medium opacity-70">{genderCounts[g]}</span>}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -154,7 +185,7 @@ export const ShopPage: React.FC = () => {
           {products && products.length > 0 && shown.length === 0 && (
             <div className="max-w-[52ch] space-y-4 py-10">
               <p className="text-ink-2">Nothing in this category yet.</p>
-              <button type="button" onClick={() => setFilter('all')} className="btn btn-quiet">
+              <button type="button" onClick={() => { setFilter('all'); setGender(null); }} className="btn btn-quiet">
                 Show everything
               </button>
             </div>
@@ -208,6 +239,12 @@ const FragranceChips: React.FC<{ details: PerfumeDetails; lifted: boolean }> = (
         <Droplets className="h-3.5 w-3.5 text-accent" aria-hidden />
         {d.concentration} <span className="font-semibold text-muted">{CONCENTRATION_NAME[d.concentration]}</span>
       </span>
+      {d.gender && (
+        <span className={chip}>
+          <Users className="h-3.5 w-3.5 text-accent" aria-hidden />
+          {GENDER_LABEL[d.gender]}
+        </span>
+      )}
       <span className={chip}>
         <Clock className="h-3.5 w-3.5 text-accent" aria-hidden />
         Lasts {d.hoursMin === d.hoursMax ? d.hoursMin : `${d.hoursMin}–${d.hoursMax}`} hours

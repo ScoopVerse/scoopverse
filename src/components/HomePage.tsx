@@ -118,21 +118,7 @@ export const HomePage: React.FC<Props> = ({ user, onLogin, onLogout }) => {
           </div>
         </section>
 
-        <section id="why" className="scroll-mt-(--nav-height) bg-paper-2 py-(--section-gap-s)">
-          <div className="page-wrap grid gap-x-16 gap-y-10 lg:grid-cols-12">
-            <h2 className="lg:col-span-4">Why Mystery Scoops?</h2>
-            <ul className="divide-y divide-rule border-y border-rule lg:col-span-8">
-              {REASONS.map((r) => (
-                <li key={r.title} className="grid gap-x-10 gap-y-2 py-8 md:grid-cols-[2fr_3fr]">
-                  <h3>{r.title}</h3>
-                  <p className="text-ink-2">{r.text}</p>
-                </li>
-              ))}
-            </ul>
-          </div>
-        </section>
-
-        <section aria-labelledby="scoops-heading" className="pt-(--section-gap-s)">
+        <section aria-labelledby="scoops-heading" className="py-(--section-gap-s)">
           <div className="page-wrap">
             <div className="mb-12 flex flex-wrap items-end justify-between gap-x-8 gap-y-3">
               <h2 id="scoops-heading">Choose your scoop</h2>
@@ -151,6 +137,20 @@ export const HomePage: React.FC<Props> = ({ user, onLogin, onLogout }) => {
             ) : (
               <p className="max-w-[52ch] text-ink-2">Our scoops are on their way. In the meantime, have a look around the shop.</p>
             )}
+          </div>
+        </section>
+
+        <section id="why" className="scroll-mt-(--nav-height) bg-paper-2 py-(--section-gap-s)">
+          <div className="page-wrap grid gap-x-16 gap-y-10 lg:grid-cols-12">
+            <h2 className="lg:col-span-4">Why Mystery Scoops?</h2>
+            <ul className="divide-y divide-rule border-y border-rule lg:col-span-8">
+              {REASONS.map((r) => (
+                <li key={r.title} className="grid gap-x-10 gap-y-2 py-8 md:grid-cols-[2fr_3fr]">
+                  <h3>{r.title}</h3>
+                  <p className="text-ink-2">{r.text}</p>
+                </li>
+              ))}
+            </ul>
           </div>
         </section>
       </main>

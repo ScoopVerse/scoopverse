@@ -18,7 +18,7 @@ const NO_PICTURE = 'This picture no longer exists.';
 // What kind of listing a product is. Perfumes and scoops have extra details; "other" has none.
 const KINDS = ['perfume', 'scoop', 'other'];
 type Notes = { top: string[]; heart: string[]; base: string[] };
-type PerfumeDetails = { inspiredBy: string; concentration: 'EDP' | 'EDT'; hoursMin: number; hoursMax: number; tagline: string; notes: Notes };
+type PerfumeDetails = { inspiredBy: string; concentration: 'EDP' | 'EDT'; gender: 'women' | 'men' | 'unisex'; hoursMin: number; hoursMax: number; tagline: string; notes: Notes };
 // A scoop listing: the price column is the Live price; offlinePriceCents is the (lower) price for offline orders.
 type ScoopDetails = { scoops: number; offlinePriceCents: number; beadsMin: number; beadsMax: number };
 type Crop = { x: number; y: number; width: number; height: number }; // percent of the original picture
@@ -152,9 +152,10 @@ function parseNotes(v: any): { value: Notes } | { error: string } {
 function parsePerfume(v: any): { value: PerfumeDetails } | { error: string } {
   const inspiredBy = oneLine(v?.inspiredBy);
   const tagline = oneLine(v?.tagline);
-  const { concentration, hoursMin, hoursMax } = v ?? {};
+  const { concentration, gender, hoursMin, hoursMax } = v ?? {};
   if (!inspiredBy || inspiredBy.length > 80) return { error: 'Please enter what the perfume is inspired by (max 80 characters).' };
   if (concentration !== 'EDP' && concentration !== 'EDT') return { error: 'Please choose EDP or EDT.' };
+  if (gender !== 'women' && gender !== 'men' && gender !== 'unisex') return { error: 'Please choose Women, Men or Unisex.' };
   const hoursOk = (h: unknown) => Number.isInteger(h) && (h as number) >= 1 && (h as number) <= 48;
   if (!hoursOk(hoursMin) || !hoursOk(hoursMax) || hoursMin > hoursMax) {
     return { error: 'Lasting time must be whole hours from 1 to 48, with the first number not above the second.' };
@@ -162,7 +163,7 @@ function parsePerfume(v: any): { value: PerfumeDetails } | { error: string } {
   if (tagline.length > 140) return { error: 'The special line is too long (max 140 characters).' };
   const notes = parseNotes(v?.notes);
   if ('error' in notes) return notes;
-  return { value: { inspiredBy, concentration, hoursMin, hoursMax, tagline, notes: notes.value } };
+  return { value: { inspiredBy, concentration, gender, hoursMin, hoursMax, tagline, notes: notes.value } };
 }
 
 function parseScoop(v: any, priceCents: unknown): { value: ScoopDetails } | { error: string } {

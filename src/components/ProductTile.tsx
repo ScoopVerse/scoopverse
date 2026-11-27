@@ -1,6 +1,6 @@
 import React from 'react';
 import { Sparkles } from 'lucide-react';
-import type { Product } from '../types';
+import { GENDER_LABEL, type Product } from '../types';
 import { formatPrice } from '../money';
 import { FramedImage } from './FramedImage';
 
@@ -43,6 +43,7 @@ export const ProductTile: React.FC<Props> = ({ product: p, href, onOpen, eager, 
       <span className="mt-1.5 flex items-baseline gap-3 font-semibold text-accent-deep">
         <span className="num">{formatPrice(scoop ? scoop.offlinePriceCents : p.priceCents)}</span>
         {p.kind === 'perfume' && p.details && <span className="text-sm font-medium text-muted">{p.details.concentration}</span>}
+        {p.kind === 'perfume' && p.details?.gender && <span className="text-sm font-medium text-muted">{GENDER_LABEL[p.details.gender]}</span>}
         {scoop && <span className="num text-sm font-medium text-muted">{formatPrice(p.priceCents)} live</span>}
       </span>
     </>

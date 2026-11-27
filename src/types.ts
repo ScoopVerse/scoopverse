@@ -23,10 +23,14 @@ export interface ScoopDetails {
   beadsMax: number;
 }
 
+export type Gender = 'women' | 'men' | 'unisex';
+export const GENDER_LABEL: Record<Gender, string> = { women: 'Women', men: 'Men', unisex: 'Unisex' };
+
 // The extra fields of a perfume listing (kind = 'perfume').
 export interface PerfumeDetails {
   inspiredBy: string; // e.g. "Versace Eros"
   concentration: 'EDP' | 'EDT';
+  gender?: Gender; // missing on perfumes saved before it existed
   hoursMin: number; // how long it lasts, in hours
   hoursMax: number;
   tagline: string; // one line on who it suits; may be empty

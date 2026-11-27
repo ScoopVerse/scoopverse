@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { ChevronLeft, ChevronRight, Crop, ImagePlus, Package, Pencil, Plus, Trash2, X } from 'lucide-react';
-import type { AdminProduct, CropArea } from '../../types';
+import { GENDER_LABEL, type AdminProduct, type CropArea, type Gender } from '../../types';
 import { centsToDollars, dollarsToCents, formatPrice } from '../../money';
 import { Dialog } from './CustomersTab';
 import { ImageCropper } from './ImageCropper';
@@ -336,6 +336,7 @@ const ProductForm: React.FC<FormProps> = ({ product, onClose, onSaved, onChanged
   const [beadsMax, setBeadsMax] = useState(sd ? String(sd.beadsMax) : '');
   const [inspiredBy, setInspiredBy] = useState(pd?.inspiredBy ?? '');
   const [concentration, setConcentration] = useState<'EDP' | 'EDT'>(pd?.concentration ?? 'EDP');
+  const [gender, setGender] = useState<Gender | null>(pd?.gender ?? null);
   const [hoursMin, setHoursMin] = useState(pd ? String(pd.hoursMin) : '');
   const [hoursMax, setHoursMax] = useState(pd ? String(pd.hoursMax) : '');
   const [tagline, setTagline] = useState(pd?.tagline ?? '');
@@ -427,6 +428,7 @@ const ProductForm: React.FC<FormProps> = ({ product, onClose, onSaved, onChanged
       const min = Number(hoursMin);
       const max = Number(hoursMax);
       if (!inspiredBy.trim()) return setError('Please enter what the perfume is inspired by.');
+      if (!gender) return setError('Please choose Women, Men or Unisex.');
       if (!/^\d{1,2}$/.test(hoursMin.trim()) || !/^\d{1,2}$/.test(hoursMax.trim()) || min < 1 || max > 48 || min > max) {
         return setError('Enter how long it lasts as whole hours from 1 to 48, e.g. 6 to 8.');
       }
@@ -434,7 +436,7 @@ const ProductForm: React.FC<FormProps> = ({ product, onClose, onSaved, onChanged
       if (Object.values(notes).some((l) => l.length > 10 || l.some((n) => n.length > 30))) {
         return setError('Each notes list can have up to 10 notes, each up to 30 characters.');
       }
-      details = { inspiredBy, concentration, hoursMin: min, hoursMax: max, tagline, notes };
+      details = { inspiredBy, concentration, gender, hoursMin: min, hoursMax: max, tagline, notes };
     }
 
     setBusy(true);
@@ -665,6 +667,22 @@ const ProductForm: React.FC<FormProps> = ({ product, onClose, onSaved, onChanged
               <div className="space-y-2">
                 <label htmlFor="perfume-inspired" className={labelClass}>Inspired by</label>
                 <input id="perfume-inspired" maxLength={80} value={inspiredBy} onChange={(e) => setInspiredBy(e.target.value)} className={inputClass} placeholder="e.g. Versace Eros" />
+              </div>
+              <div className="space-y-2">
+                <span className={labelClass}>For</span>
+                <div role="group" aria-label="Perfume is for" className="inline-flex gap-1.5 p-1 rounded-full bg-white border border-[#e6e2dc]">
+                  {(Object.keys(GENDER_LABEL) as Gender[]).map((g) => (
+                    <button
+                      key={g}
+                      type="button"
+                      aria-pressed={gender === g}
+                      onClick={() => setGender(g)}
+                      className={`px-4 py-1.5 rounded-full text-sm font-bold transition-all ${gender === g ? 'bg-[#695282] text-white shadow-sm' : 'text-[#4a454e] hover:bg-[#efdbff]/50'}`}
+                    >
+                      {GENDER_LABEL[g]}
+                    </button>
+                  ))}
+                </div>
               </div>
               <div className="grid sm:grid-cols-2 gap-4">
                 <div className="space-y-2">
