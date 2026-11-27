@@ -37,7 +37,7 @@ proof of payment; only HitPay telling our server (or our server asking HitPay) i
 ## 2. HitPay (payment)
 
 What it is: HitPay gives us a **hosted checkout page**. We never touch card numbers.
-We create a "payment request" (amount, currency SGD, our order number), HitPay gives back a
+We create a "payment request" (amount, currency MYR, our order number), HitPay gives back a
 URL, we send the customer there, HitPay tells us when they paid.
 
 Sandbox (developer) mode, as you asked:
@@ -53,7 +53,7 @@ Sandbox (developer) mode, as you asked:
   Going live later = swap three `.env` values, no code change.
 
 How we use it:
-- `POST /v1/payment-requests` with `amount`, `currency=SGD`, `reference_number` = our order
+- `POST /v1/payment-requests` with `amount`, `currency=MYR`, `reference_number` = our order
   number, `redirect_url` = our order page, `payment_methods[]` (`paynow_online`, `card`),
   `email`, `name`. Response has `id` and `url`.
 - Send the customer to `url`. After paying, HitPay sends them back to `redirect_url`.

@@ -1,5 +1,5 @@
 // Prices are whole cents everywhere (no decimals, so no rounding errors).
-export const formatPrice = (cents: number) => `S$${(cents / 100).toFixed(2)}`;
+export const formatPrice = (cents: number) => `RM${(cents / 100).toFixed(2)}`;
 
 export const centsToDollars = (cents: number) => (cents / 100).toFixed(2);
 

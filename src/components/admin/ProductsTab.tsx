@@ -574,7 +574,7 @@ const ProductForm: React.FC<FormProps> = ({ product, onClose, onSaved, onChanged
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <label htmlFor="product-price" className={labelClass}>Price (S$)</label>
+              <label htmlFor="product-price" className={labelClass}>Price (RM)</label>
               <input id="product-price" required inputMode="decimal" value={price} onChange={(e) => setPrice(e.target.value)} className={inputClass} placeholder="12.50" />
             </div>
             <div className="space-y-2">

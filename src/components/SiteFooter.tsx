@@ -11,7 +11,7 @@ export const SiteFooter: React.FC = () => {
     <footer className="mt-(--section-gap-s) border-t border-rule">
       <div className="page-wrap grid gap-10 py-16 md:grid-cols-12">
         <div className="space-y-4 md:col-span-5">
-          <img src={logoImg} alt="ScoopVerse" className="h-16 w-auto" />
+          <img src={logoImg} alt="ScoopVerse" className="-my-3 h-28 w-auto" />
           <p className="text-ink-2">Mystery Fragrance Scoops</p>
         </div>
         <nav aria-label="Footer" className="md:col-span-3">

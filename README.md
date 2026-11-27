@@ -70,7 +70,7 @@ per 15 min. Every admin API route except login/logout requires an admin session.
 ## Shop and product pictures
 
 `/shop` lists the products marked Visible in Admin → Products (it is not linked from the
-homepage yet, and sends `noindex`). Prices are stored as whole cents (SGD).
+homepage yet, and sends `noindex`). Prices are stored as whole sen (MYR, Malaysian ringgit).
 
 Product descriptions are formatted text (bold, italic, underline, font, size, lists), written in the
 admin's text editor (Tiptap) and stored as HTML. The server cleans every description before saving

@@ -15,7 +15,7 @@ export const SiteNav: React.FC<Props> = ({ user, onLogin, onLogout, current }) =
   <header className="sticky top-0 z-40 border-b border-rule bg-paper">
     <div className="page-wrap flex h-(--nav-height) items-center justify-between gap-4">
       <a href="/" aria-label="ScoopVerse, home" className="shrink-0 rounded-card">
-        <img src={logoImg} alt="ScoopVerse" className="h-12 w-auto sm:h-14" />
+        <img src={logoImg} alt="ScoopVerse" className="-my-3 h-20 w-auto sm:h-24" />
       </a>
       <nav aria-label="Main" className="flex items-center gap-2 sm:gap-5">
         <a

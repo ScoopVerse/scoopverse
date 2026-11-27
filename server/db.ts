@@ -60,7 +60,7 @@ export async function migrate() {
     );
     CREATE UNIQUE INDEX IF NOT EXISTS admins_email_lower_idx ON admins (lower(email));
 
-    -- Prices are whole cents (SGD). "image" is a file name inside uploads/products/.
+    -- Prices are whole sen (MYR). "image" is a file name inside uploads/products/.
     CREATE TABLE IF NOT EXISTS products (
       id          BIGSERIAL PRIMARY KEY,
       name        TEXT NOT NULL,
