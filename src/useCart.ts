@@ -39,7 +39,7 @@ export function useCart(user: User | null) {
     cart,
     open,
     setOpen,
-    add: (productId: string, mode: string) => send('POST', '', { productId, mode }),
+    add: (productId: string, mode: string, quantity = 1) => send('POST', '', { productId, mode, quantity }),
     setQuantity: (id: string, quantity: number) => send('PATCH', `/${id}`, { quantity }),
     remove: (id: string) => send('DELETE', `/${id}`),
   };

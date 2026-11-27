@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronLeft, ChevronRight, Clock, Droplets, Package, Radio, Users, ShoppingBag, Sparkles, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Clock, Droplets, Minus, Package, Plus, Radio, Users, ShoppingBag, Sparkles, X } from 'lucide-react';
 import { GENDER_LABEL, type Gender, type PerfumeDetails, type PerfumeNotes, type Product, type ScoopDetails } from '../types';
 import { formatPrice } from '../money';
 import { useAccount } from '../useAccount';
@@ -38,7 +38,7 @@ export const ShopPage: React.FC = () => {
   const live = useLive();
   const cart = useCart(user);
   // An "Add to cart" pressed while logged out waits here, and goes through once the customer has logged in.
-  const pendingAdd = useRef<{ productId: string; mode: string; from?: Fly } | null>(null);
+  const pendingAdd = useRef<{ productId: string; mode: string; quantity: number; from?: Fly } | null>(null);
   // A picture flying from "Add to cart" to the cart button; the badge count waits (holdCount) until it lands.
   const [fly, setFly] = useState<Fly | null>(null);
   const [holdCount, setHoldCount] = useState<number | null>(null);
@@ -93,14 +93,14 @@ export const ShopPage: React.FC = () => {
   }, [products, filter, gender, sort]);
 
   // Adds to the cart (asking the customer to log in first). Returns an error message, or null when it worked.
-  const addToCart = async (productId: string, mode: string, from?: Fly) => {
+  const addToCart = async (productId: string, mode: string, quantity: number, from?: Fly) => {
     if (!user) {
-      pendingAdd.current = { productId, mode, from };
+      pendingAdd.current = { productId, mode, quantity, from };
       setAuthOpen(true);
       return null;
     }
     const before = cart.cart?.count ?? 0;
-    const err = await cart.add(productId, mode);
+    const err = await cart.add(productId, mode, quantity);
     if (!err) added(before, from);
     return err;
   };
@@ -248,7 +248,7 @@ export const ShopPage: React.FC = () => {
           const pending = pendingAdd.current;
           pendingAdd.current = null;
           const before = cart.cart?.count ?? 0;
-          if (pending && !(await cart.add(pending.productId, pending.mode))) added(before, pending.from);
+          if (pending && !(await cart.add(pending.productId, pending.mode, pending.quantity))) added(before, pending.from);
         }}
       />
     </div>
@@ -438,7 +438,7 @@ const OrderOptions: React.FC<{ details: ScoopDetails; livePrice: number; live: b
   );
 };
 
-const ProductDetail: React.FC<{ product: Product; onClose: () => void; live: boolean; onAdd: (productId: string, mode: string, from?: Fly) => Promise<string | null> }> = ({ product, onClose, live, onAdd }) => {
+const ProductDetail: React.FC<{ product: Product; onClose: () => void; live: boolean; onAdd: (productId: string, mode: string, quantity: number, from?: Fly) => Promise<string | null> }> = ({ product, onClose, live, onAdd }) => {
   // The list doesn't carry descriptions; this one product's comes when its pop-up opens.
   const [description, setDescription] = useState<string | undefined>();
   // Every picture of the listing (the list only carries the cover), and which one is showing.
@@ -446,6 +446,7 @@ const ProductDetail: React.FC<{ product: Product; onClose: () => void; live: boo
   const [shot, setShot] = useState(0);
   const dialogRef = useRef<HTMLDivElement>(null);
   const [adding, setAdding] = useState(false);
+  const [quantity, setQuantity] = useState(1);
   const [addError, setAddError] = useState<string | null>(null);
   const perfume = product.kind === 'perfume' ? product.details : null;
   const scoop = product.kind === 'scoop' ? product.details : null;
@@ -580,18 +581,31 @@ const ProductDetail: React.FC<{ product: Product; onClose: () => void; live: boo
               )}
               <div className="mt-auto shrink-0 space-y-2 pt-1">
                 {scoop && <OrderOptions details={scoop} livePrice={product.priceCents} live={live} mode={mode} onMode={setPickedMode} />}
+                <div className="flex gap-3">
+                {product.inStock && (
+                  <div role="group" aria-label="Quantity" className="flex shrink-0 items-center rounded-full border border-rule">
+                    <button type="button" onClick={() => setQuantity((q) => q - 1)} disabled={quantity <= 1} aria-label="One less" className="inline-flex h-11 w-11 items-center justify-center rounded-full text-ink-2 transition-colors hover:text-accent disabled:opacity-40 disabled:hover:text-ink-2">
+                      <Minus className="h-4 w-4" aria-hidden />
+                    </button>
+                    <span className="num w-7 text-center font-semibold" aria-live="polite" aria-label={`Quantity ${quantity}`}>{quantity}</span>
+                    <button type="button" onClick={() => setQuantity((q) => q + 1)} disabled={quantity >= 10} aria-label="One more" className="inline-flex h-11 w-11 items-center justify-center rounded-full text-ink-2 transition-colors hover:text-accent disabled:opacity-40 disabled:hover:text-ink-2">
+                      <Plus className="h-4 w-4" aria-hidden />
+                    </button>
+                  </div>
+                )}
                 <button
                   disabled={!product.inStock || adding}
                   onClick={async (e) => {
                     setAdding(true);
-                    setAddError(await onAdd(product.id, scoop ? mode : 'standard', { rect: e.currentTarget.getBoundingClientRect(), src: images[0] ?? null }));
+                    setAddError(await onAdd(product.id, scoop ? mode : 'standard', quantity, { rect: e.currentTarget.getBoundingClientRect(), src: images[0] ?? null }));
                     setAdding(false);
                   }}
-                  className="btn btn-primary w-full"
+                  className="btn btn-primary min-w-0 flex-1"
                 >
                   <ShoppingBag className="h-4 w-4" aria-hidden />
                   {product.inStock ? 'Add to cart' : 'Sold out'}
                 </button>
+                </div>
                 {addError && (
                   <p role="alert" className="text-center text-sm text-error">
                     {addError}

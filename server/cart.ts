@@ -104,7 +104,7 @@ cartRouter.post('/', async (req, res) => {
     const line = (have.rows.find((r) => r.mode === mode)?.quantity ?? 0) + quantity;
     if (total > product.stock || line > MAX_QTY) {
       await client.query('ROLLBACK');
-      return res.status(409).json({ error: total > product.stock ? `Only ${product.stock} available.` : `You can order up to ${MAX_QTY} of one item.` });
+      return res.status(409).json({ error: total > product.stock ? `Only ${product.stock} available${total > quantity ? ` (${total - quantity} already in your cart)` : ''}.` : `You can order up to ${MAX_QTY} of one item.` });
     }
     await client.query(
       `INSERT INTO cart_items (user_id, product_id, mode, quantity) VALUES ($1, $2, $3, $4)
