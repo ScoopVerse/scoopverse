@@ -77,7 +77,7 @@ admin's text editor (Tiptap) and stored as HTML. The server cleans every descrip
 (`sanitize-html`): only those tags and font/size styles survive, so a description can't carry a script,
 link or image. Old plain-text descriptions were converted once at startup.
 
-Every product has a listing type, chosen in the admin form: **Perfume**, **Other** (Scoop is reserved, not built yet). A perfume also has
+Every product has a listing type, chosen in the admin form: **Perfume**, **Scoop** or **Other** (a scoop is a plain listing for now). A perfume also has
 its own box in the shop: what it is inspired by, EDP or EDT, how many hours it lasts (1 to 48), and an optional one-line pitch.
 A second, optional box shows the top, heart and base notes (up to 10 per row, 30 characters each, typed as comma-separated text).
 They are stored in the `kind` and `details` (JSON) columns; the server checks them, and the shop shows them as plain text.

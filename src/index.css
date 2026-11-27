@@ -1,4 +1,11 @@
+/* Hallmark · shape: Catalogue · genre: editorial · theme: brand · redesign: full
+ * paper: oklch(98.3% 0.011 85) · accent: oklch(44% 0.075 312) · display: Playfair Display · body: Manrope · hero: Stage (/), Banner (/shop) · nav: edge-aligned · footer: mast · signature: the scoops themselves, in the hero and at the foot
+ * axes: light/high-contrast-serif/chromatic-violet · posture: Stage · contrast: pass · fold: pass · v2.0.0 */
+/* Hallmark · dropped onClick={() => setOpen(p)} · the product tile now calls open(p), which also puts the product in the page address so it can be linked and Back closes it */
+/* Hallmark · pre-emit critique: P4 H4 E3 S4 R4 V4 · weakest: E, the brand kept its soft lilac so the page leans on the product pictures for edge */
 @import "tailwindcss";
+@import "./tokens.css";
+@import "./base.css" layer(base);
 
 @layer utilities {
   .font-serif-display {

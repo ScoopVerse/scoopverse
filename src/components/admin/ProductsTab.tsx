@@ -171,9 +171,9 @@ export const ProductsTab: React.FC<Props> = ({ onSessionExpired }) => {
               <div className="min-w-0 flex-1 basis-40">
                 <p className={`font-bold truncate ${p.active ? 'text-[#1c1c18]' : 'text-[#7b757e]'}`}>{p.name}</p>
                 <p className="text-sm text-[#4a454e]">
-                  {p.kind === 'perfume' && (
+                  {p.kind !== 'other' && (
                     <>
-                      <span className="font-semibold text-[#695282]">Perfume</span>
+                      <span className="font-semibold text-[#695282]">{p.kind === 'perfume' ? 'Perfume' : 'Scoop'}</span>
                       <span className="text-[#c9c3cc]"> · </span>
                     </>
                   )}
@@ -306,8 +306,8 @@ const ProductForm: React.FC<FormProps> = ({ product, onClose, onSaved, onChanged
   const [price, setPrice] = useState(product ? centsToDollars(product.priceCents) : '');
   const [stock, setStock] = useState(String(product?.stock ?? 0));
   const [active, setActive] = useState(product?.active ?? true);
-  // Listing type and the perfume box ('scoop' can't be chosen yet, so it shows as plain "other").
-  const [kind, setKind] = useState<'perfume' | 'other'>(product?.kind === 'perfume' ? 'perfume' : 'other');
+  // Listing type. Only a perfume has its own detail boxes so far.
+  const [kind, setKind] = useState<'perfume' | 'scoop' | 'other'>(product?.kind ?? 'other');
   const pd = product?.details;
   const [inspiredBy, setInspiredBy] = useState(pd?.inspiredBy ?? '');
   const [concentration, setConcentration] = useState<'EDP' | 'EDT'>(pd?.concentration ?? 'EDP');
@@ -496,13 +496,10 @@ const ProductForm: React.FC<FormProps> = ({ product, onClose, onSaved, onChanged
                   key={k}
                   type="button"
                   aria-pressed={kind === k}
-                  disabled={k === 'scoop'}
-                  onClick={() => k !== 'scoop' && setKind(k)}
-                  className={`px-4 py-1.5 rounded-full text-sm font-bold transition-all disabled:cursor-not-allowed ${
-                    kind === k ? 'bg-[#695282] text-white shadow-sm' : k === 'scoop' ? 'text-[#b9b2bd]' : 'text-[#4a454e] hover:bg-white'
-                  }`}
+                  onClick={() => setKind(k)}
+                  className={`px-4 py-1.5 rounded-full text-sm font-bold transition-all ${kind === k ? 'bg-[#695282] text-white shadow-sm' : 'text-[#4a454e] hover:bg-white'}`}
                 >
-                  {k === 'perfume' ? 'Perfume' : k === 'scoop' ? 'Scoop (soon)' : 'Other'}
+                  {k === 'perfume' ? 'Perfume' : k === 'scoop' ? 'Scoop' : 'Other'}
                 </button>
               ))}
             </div>

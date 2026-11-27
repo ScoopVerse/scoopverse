@@ -14,8 +14,8 @@ const ORIGINAL_DIR = path.join(UPLOAD_ROOT, 'originals');
 const UPLOAD_MAX_BYTES = 30 * 1024 * 1024;
 const NOT_FOUND = 'This product no longer exists.';
 
-// What kind of listing a product is. 'scoop' exists in the database for later but can't be chosen yet.
-const KINDS = ['perfume', 'other'];
+// What kind of listing a product is. Only a perfume has extra details so far; a scoop is a plain listing until its own design.
+const KINDS = ['perfume', 'scoop', 'other'];
 type Notes = { top: string[]; heart: string[]; base: string[] };
 type PerfumeDetails = { inspiredBy: string; concentration: 'EDP' | 'EDT'; hoursMin: number; hoursMax: number; tagline: string; notes: Notes };
 type Crop = { x: number; y: number; width: number; height: number }; // percent of the original picture

@@ -1,15 +1,34 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { ArrowLeft, Clock, Droplets, ShoppingBag, Sparkles, X } from 'lucide-react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Clock, Droplets, ShoppingBag, Sparkles, X } from 'lucide-react';
 import type { PerfumeDetails, PerfumeNotes, Product } from '../types';
 import { formatPrice } from '../money';
-import { ScoopVerseLogo } from './ScoopVerseLogo';
+import { useAccount } from '../useAccount';
+import { AuthModal } from './AuthModal';
+import { SiteNav } from './SiteNav';
+import { SiteFooter } from './SiteFooter';
+import { ProductTile } from './ProductTile';
 
-// /shop: every product the admin has made visible. Adding to cart comes in the next phase.
+type Filter = 'all' | 'perfume' | 'scoop' | 'other';
+type Sort = 'newest' | 'price-asc' | 'price-desc';
+
+const FILTERS: { key: Filter; label: string }[] = [
+  { key: 'all', label: 'All' },
+  { key: 'perfume', label: 'Perfumes' },
+  { key: 'scoop', label: 'Scoops' },
+  { key: 'other', label: 'Other' },
+];
+
+// The pop-up is addressed by the page's #hash (/shop#12), so a product can be linked to and the Back button closes it.
+const hashId = () => window.location.hash.slice(1) || null;
+
+// /shop: every product the admin has made visible, filterable by type and sortable by price. Adding to cart comes in the next phase.
 export const ShopPage: React.FC = () => {
+  const { user, setUser, authOpen, setAuthOpen, logout } = useAccount();
   const [products, setProducts] = useState<Product[] | null>(null);
   const [error, setError] = useState(false);
-  const [open, setOpen] = useState<Product | null>(null);
-  const close = useCallback(() => setOpen(null), []);
+  const [filter, setFilter] = useState<Filter>('all');
+  const [sort, setSort] = useState<Sort>('newest');
+  const [openId, setOpenId] = useState<string | null>(hashId);
 
   useEffect(() => {
     document.title = 'Shop — ScoopVerse';
@@ -19,108 +38,173 @@ export const ShopPage: React.FC = () => {
         setProducts((await res.json()).products);
       })
       .catch(() => setError(true));
+    const sync = () => setOpenId(hashId());
+    window.addEventListener('popstate', sync);
+    return () => window.removeEventListener('popstate', sync);
   }, []);
 
-  return (
-    <div className="min-h-screen bg-[#fdf9f3] font-sans-ui text-[#1c1c18] selection:bg-[#9d84b7]/20 selection:text-[#2d2438]">
-      <header className="max-w-6xl mx-auto px-4 sm:px-6 pt-6 pb-2 flex items-center justify-between gap-3">
-        <a href="/" className="inline-flex items-center gap-2 text-sm font-semibold text-[#695282] hover:text-[#533d6b] transition-colors">
-          <ArrowLeft className="w-4 h-4" />
-          Home
-        </a>
-        <ScoopVerseLogo size="sm" />
-        <span className="w-16" aria-hidden />
-      </header>
+  const open = (p: Product) => {
+    window.history.pushState({ shopOpen: true }, '', `#${p.id}`);
+    setOpenId(p.id);
+  };
+  // Back out of the entry the pop-up added; when the page was opened straight onto a product, just drop the hash.
+  const close = useCallback(() => {
+    if (window.history.state?.shopOpen) return window.history.back();
+    window.history.replaceState(null, '', window.location.pathname + window.location.search);
+    setOpenId(null);
+  }, []);
 
-      <main className="max-w-6xl mx-auto px-4 sm:px-6 pb-16 space-y-8">
-        <div className="text-center space-y-3 pt-4">
-          <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-[#efdbff] text-[#533d6b] text-xs font-bold uppercase tracking-widest">
-            <Sparkles className="w-3.5 h-3.5 text-[#695282]" />
-            <span>Mystery Fragrance Scoops</span>
-          </div>
-          <h1 className="font-serif-display text-4xl sm:text-5xl font-bold">The Shop</h1>
+  const counts = useMemo(() => {
+    const c: Record<Filter, number> = { all: products?.length ?? 0, perfume: 0, scoop: 0, other: 0 };
+    for (const p of products ?? []) c[p.kind === 'perfume' || p.kind === 'scoop' ? p.kind : 'other']++;
+    return c;
+  }, [products]);
+  const filters = FILTERS.filter((f) => f.key === 'all' || counts[f.key] > 0);
+
+  const shown = useMemo(() => {
+    const list = (products ?? []).filter((p) => filter === 'all' || (filter === 'other' ? p.kind !== 'perfume' && p.kind !== 'scoop' : p.kind === filter));
+    if (sort === 'price-asc') return [...list].sort((a, b) => a.priceCents - b.priceCents);
+    if (sort === 'price-desc') return [...list].sort((a, b) => b.priceCents - a.priceCents);
+    return list;
+  }, [products, filter, sort]);
+
+  const openProduct = products?.find((p) => p.id === openId) ?? null;
+
+  return (
+    <div className="site min-h-screen selection:bg-accent/20">
+      <SiteNav user={user} onLogin={() => setAuthOpen(true)} onLogout={logout} current="shop" />
+
+      <main>
+        <div className="page-wrap grid items-end gap-x-16 gap-y-4 pb-10 pt-12 lg:grid-cols-12">
+          <h1 className="text-display-s lg:col-span-6">The Shop</h1>
+          <p className="lead text-ink-2 lg:col-span-5 lg:col-start-8">Mystery fragrance scoops, full bottles and more.</p>
         </div>
 
-        {error && (
-          <p role="alert" className="max-w-md mx-auto text-center text-sm text-[#a33a3a] bg-[#fbeaea] border border-[#f1cccc] rounded-xl px-4 py-3">
-            We couldn't load the shop. Please refresh and try again.
-          </p>
-        )}
-
-        {!products && !error && (
-          <ul className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6" aria-hidden>
-            {[0, 1, 2, 3].map((i) => (
-              <li key={i} className="space-y-3">
-                <div className="aspect-square rounded-3xl bg-[#efe7f5]/70 animate-pulse" />
-                <div className="h-4 w-2/3 rounded-full bg-[#efe7f5]/70 animate-pulse" />
-              </li>
-            ))}
-          </ul>
-        )}
-
-        {products?.length === 0 && (
-          <div className="text-center py-16 space-y-3">
-            <div className="w-16 h-16 rounded-full bg-[#efdbff]/70 text-[#695282] flex items-center justify-center mx-auto">
-              <ShoppingBag className="w-7 h-7" />
+        {products && products.length > 0 && (
+          <div className="z-30 border-y border-rule bg-paper lg:sticky lg:top-(--nav-height)">
+            <div className="page-wrap flex flex-wrap items-center justify-between gap-x-8 gap-y-2 py-2">
+              {filters.length > 2 ? (
+                <div role="group" aria-label="Filter by type" className="flex flex-wrap gap-x-2">
+                  {filters.map((f) => (
+                    <button
+                      key={f.key}
+                      type="button"
+                      aria-pressed={filter === f.key}
+                      onClick={() => setFilter(f.key)}
+                      className="inline-flex min-h-11 items-center gap-1.5 border-b-2 border-transparent px-2 font-semibold text-ink-2 transition-colors hover:text-accent aria-pressed:border-accent aria-pressed:text-ink"
+                    >
+                      {f.label}
+                      <span className="num text-sm font-medium text-muted">{counts[f.key]}</span>
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <span />
+              )}
+              <div className="flex items-center gap-4">
+                <p role="status" className="num text-sm text-muted">
+                  {shown.length} {shown.length === 1 ? 'product' : 'products'}
+                </p>
+                <label className="flex items-center gap-2 text-sm text-ink-2">
+                  Sort by
+                  <select
+                    value={sort}
+                    onChange={(e) => setSort(e.target.value as Sort)}
+                    className="min-h-11 rounded-card border border-rule bg-paper px-3 font-semibold text-ink"
+                  >
+                    <option value="newest">Newest</option>
+                    <option value="price-asc">Price, low to high</option>
+                    <option value="price-desc">Price, high to low</option>
+                  </select>
+                </label>
+              </div>
             </div>
-            <h2 className="font-serif-display text-2xl font-bold">Nothing here yet</h2>
-            <p className="text-sm text-[#4a454e]">New scoops are on their way. Check back soon.</p>
           </div>
         )}
 
-        {products && products.length > 0 && (
-          <ul className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
-            {products.map((p) => (
-              <li key={p.id}>
-                <button onClick={() => setOpen(p)} className="group w-full text-left space-y-3 rounded-3xl focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#9d84b7]">
-                  <div className="relative aspect-square rounded-3xl overflow-hidden bg-white border border-[#efe7f5] shadow-xs group-hover:shadow-lg group-hover:-translate-y-0.5 transition-all">
-                    <ProductImage product={p} />
-                    {!p.inStock && (
-                      <span className="absolute top-3 left-3 px-3 py-1 rounded-full bg-[#2d2438]/85 text-white text-xs font-bold">Sold out</span>
-                    )}
-                  </div>
-                  <div className="px-1 space-y-0.5">
-                    <p className="font-bold leading-snug line-clamp-2 [overflow-wrap:anywhere]">{p.name}</p>
-                    {p.details && <p className="text-xs text-[#7b757e] line-clamp-1 [overflow-wrap:anywhere]">Inspired by {p.details.inspiredBy}</p>}
-                    <p className="text-sm font-semibold text-[#695282]">
-                      {formatPrice(p.priceCents)}
-                      {p.details && <span className="ml-2 px-2 py-0.5 rounded-full bg-[#efdbff]/70 text-[#533d6b] text-[11px] font-bold">{p.details.concentration}</span>}
-                    </p>
-                  </div>
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
+        <div className="page-wrap pt-10">
+          {error && (
+            <p role="alert" className="max-w-md rounded-card border border-error/30 px-4 py-3 text-error">
+              We couldn’t load the shop. Please refresh and try again.
+            </p>
+          )}
+
+          {!products && !error && (
+            <ul className="grid grid-cols-2 gap-x-6 gap-y-10 lg:grid-cols-3 xl:grid-cols-4" aria-hidden>
+              {[0, 1, 2, 3].map((i) => (
+                <li key={i} className="space-y-3">
+                  <div className="aspect-square rounded-card bg-paper-3 motion-safe:animate-pulse" />
+                  <div className="h-4 w-2/3 rounded-card bg-paper-3 motion-safe:animate-pulse" />
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {products?.length === 0 && (
+            <div className="max-w-[52ch] space-y-2 py-10">
+              <h2 className="text-3xl">Nothing here yet</h2>
+              <p className="text-ink-2">New scoops are on their way. Check back soon.</p>
+            </div>
+          )}
+
+          {products && products.length > 0 && shown.length === 0 && (
+            <div className="max-w-[52ch] space-y-4 py-10">
+              <p className="text-ink-2">Nothing in this category yet.</p>
+              <button type="button" onClick={() => setFilter('all')} className="btn btn-quiet">
+                Show everything
+              </button>
+            </div>
+          )}
+
+          {shown.length > 0 && (
+            <ul className="grid grid-cols-2 gap-x-6 gap-y-10 lg:grid-cols-3 xl:grid-cols-4">
+              {shown.map((p, i) => (
+                <li key={p.id}>
+                  <ProductTile product={p} onOpen={() => open(p)} eager={i < 4} />
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
       </main>
 
-      {open && <ProductDetail product={open} onClose={close} />}
+      <SiteFooter />
+
+      {openProduct && <ProductDetail product={openProduct} onClose={close} />}
+      <AuthModal
+        open={authOpen}
+        onClose={() => setAuthOpen(false)}
+        onAuthed={(u) => {
+          setUser(u);
+          setAuthOpen(false);
+        }}
+      />
     </div>
   );
 };
 
 const ProductImage: React.FC<{ product: Product }> = ({ product }) =>
   product.imageUrl ? (
-    <img src={product.imageUrl} alt={product.name} loading="lazy" className={`w-full h-full object-cover ${product.inStock ? '' : 'opacity-60'}`} />
+    <img src={product.imageUrl} alt={product.name} className={`h-full w-full object-cover ${product.inStock ? '' : 'opacity-60'}`} />
   ) : (
-    <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-[#efdbff]/60 via-[#fdf9f3] to-[#ffd1b3]/40 text-[#9d84b7]">
-      <Sparkles className="w-10 h-10" />
+    <div className="flex h-full w-full items-center justify-center bg-paper-3 text-accent">
+      <Sparkles className="h-10 w-10" aria-hidden />
     </div>
   );
 
 const CONCENTRATION_NAME = { EDP: 'Eau de Parfum', EDT: 'Eau de Toilette' };
 
-// Strength and staying power as two glass chips laid over the picture's bottom edge.
+// Strength and staying power as two chips laid over the picture's bottom edge.
 const FragranceChips: React.FC<{ details: PerfumeDetails }> = ({ details: d }) => {
-  const chip = 'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/90 backdrop-blur-sm shadow-xs text-xs font-bold text-[#533d6b]';
+  const chip = 'inline-flex items-center gap-1.5 rounded-full bg-paper px-3 py-1.5 text-xs font-bold text-accent-deep';
   return (
     <div className="absolute bottom-4 left-4 right-4 flex flex-wrap gap-2">
       <span className={chip}>
-        <Droplets className="w-3.5 h-3.5 text-[#9d84b7]" />
-        {d.concentration} <span className="font-semibold text-[#7b757e]">{CONCENTRATION_NAME[d.concentration]}</span>
+        <Droplets className="h-3.5 w-3.5 text-accent" aria-hidden />
+        {d.concentration} <span className="font-semibold text-muted">{CONCENTRATION_NAME[d.concentration]}</span>
       </span>
       <span className={chip}>
-        <Clock className="w-3.5 h-3.5 text-[#9d84b7]" />
+        <Clock className="h-3.5 w-3.5 text-accent" aria-hidden />
         Lasts {d.hoursMin === d.hoursMax ? d.hoursMin : `${d.hoursMin}–${d.hoursMax}`} hours
       </span>
     </div>
@@ -129,14 +213,14 @@ const FragranceChips: React.FC<{ details: PerfumeDetails }> = ({ details: d }) =
 
 // What it is inspired by, and the one-line pitch.
 const FragranceBox: React.FC<{ details: PerfumeDetails }> = ({ details: d }) => (
-  <div className="shrink-0 rounded-2xl border border-[#e3d2f3] bg-gradient-to-br from-[#f8f1fd] to-[#fff4ea] px-4 py-3 space-y-1.5">
+  <div className="shrink-0 space-y-1.5 border-y border-rule py-3">
     <p className="flex flex-wrap items-baseline gap-x-2 [overflow-wrap:anywhere]">
-      <span className="text-xs font-semibold text-[#7b757e]">Inspired by</span>
-      <span className="font-serif-display text-xl font-bold leading-snug text-[#2d2438]">{d.inspiredBy}</span>
+      <span className="text-sm text-muted">Inspired by</span>
+      <span className="font-display text-xl font-bold leading-snug text-ink">{d.inspiredBy}</span>
     </p>
     {d.tagline && (
-      <p className="flex items-start gap-2 text-sm italic leading-snug text-[#533d6b] [overflow-wrap:anywhere]">
-        <Sparkles className="w-4 h-4 shrink-0 mt-0.5 text-[#d4af37]" />
+      <p className="flex items-start gap-2 text-sm italic leading-snug text-ink-2 [overflow-wrap:anywhere]">
+        <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-accent" aria-hidden />
         {d.tagline}
       </p>
     )}
@@ -144,27 +228,26 @@ const FragranceBox: React.FC<{ details: PerfumeDetails }> = ({ details: d }) => 
 );
 
 const NOTE_ROWS = [
-  { key: 'top', label: 'Top', hint: 'opening', dot: 'bg-[#f2b880]', chip: 'bg-[#fff0e0] text-[#8a5a1c] border-[#f3d9b8]' },
-  { key: 'heart', label: 'Heart', hint: 'core', dot: 'bg-[#b793d6]', chip: 'bg-[#f3e8fb] text-[#533d6b] border-[#e3d2f3]' },
-  { key: 'base', label: 'Base', hint: 'lasting', dot: 'bg-[#8a6a52]', chip: 'bg-[#ece4dc] text-[#5a4636] border-[#dacbbd]' },
+  { key: 'top', label: 'Top', hint: 'opening' },
+  { key: 'heart', label: 'Heart', hint: 'core' },
+  { key: 'base', label: 'Base', hint: 'lasting' },
 ] as const;
 
-// The notes box: top, heart and base notes as coloured chips. Rows with no notes are left out; no notes at all, no box.
+// The notes: top, heart and base notes as chips. Rows with no notes are left out; no notes at all, nothing.
 const NotesBox: React.FC<{ notes: PerfumeNotes }> = ({ notes }) => {
   const rows = NOTE_ROWS.filter((r) => notes[r.key].length > 0);
   if (rows.length === 0) return null;
   return (
-    <div className="shrink-0 rounded-2xl border border-[#e6e2dc] bg-[#fdfaf6] px-4 py-3 space-y-2.5">
-      <p className="text-xs font-semibold text-[#7b757e]">Fragrance notes</p>
+    <div className="shrink-0 space-y-2.5 border-b border-rule pb-3">
+      <p className="text-sm font-semibold text-muted">Fragrance notes</p>
       {rows.map((r) => (
-        <div key={r.key} className="grid grid-cols-[3.75rem_minmax(0,1fr)] gap-3 items-start" title={r.hint}>
-          <div className="flex items-center gap-2 pt-1">
-            <span className={`w-2 h-2 rounded-full shrink-0 ${r.dot}`} aria-hidden />
-            <p className="text-xs font-bold leading-none text-[#2d2438]">{r.label}</p>
-          </div>
+        <div key={r.key} className="grid grid-cols-[3.75rem_minmax(0,1fr)] items-start gap-3" title={r.hint}>
+          <p className="pt-0.5 text-sm font-bold text-ink">{r.label}</p>
           <ul className="flex flex-wrap gap-1.5" aria-label={`${r.label} notes`}>
             {notes[r.key].map((n, i) => (
-              <li key={i} className={`px-2.5 py-0.5 rounded-full border text-xs font-semibold [overflow-wrap:anywhere] ${r.chip}`}>{n}</li>
+              <li key={i} className="rounded-full bg-paper-3 px-2.5 py-0.5 text-xs font-semibold text-accent-deep [overflow-wrap:anywhere]">
+                {n}
+              </li>
             ))}
           </ul>
         </div>
@@ -213,8 +296,8 @@ const ProductDetail: React.FC<{ product: Product; onClose: () => void }> = ({ pr
   }, [onClose]);
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-[#2d2438]/30 backdrop-blur-sm" onClick={onClose}>
-      <div className="min-h-full flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-50 overflow-y-auto bg-ink/40" onClick={onClose}>
+      <div className="flex min-h-full items-center justify-center p-4">
         <div
           ref={dialogRef}
           tabIndex={-1}
@@ -223,59 +306,56 @@ const ProductDetail: React.FC<{ product: Product; onClose: () => void }> = ({ pr
           aria-label={product.name}
           onClick={(e) => e.stopPropagation()}
           // 1296px wide on big screens; the text column is half the width, so the square picture is about 653px tall.
-          className="relative w-full max-w-[81rem] outline-hidden bg-white rounded-3xl overflow-hidden border border-white shadow-xl grid lg:grid-cols-[minmax(0,1fr)_49.6%]"
+          className="relative grid w-full max-w-[81rem] overflow-hidden rounded-3xl bg-white outline-hidden lg:grid-cols-[minmax(0,1fr)_49.6%]"
         >
           <button
             onClick={onClose}
             aria-label="Close"
-            className="absolute top-3 right-3 z-10 w-9 h-9 rounded-full flex items-center justify-center bg-white/85 text-[#7b757e] hover:text-[#695282] hover:bg-white shadow-xs transition-all"
+            className="absolute right-3 top-3 z-10 flex h-11 w-11 items-center justify-center rounded-full bg-paper text-ink-2 transition-colors hover:text-accent"
           >
-            <X className="w-4 h-4" />
+            <X className="h-4 w-4" aria-hidden />
           </button>
           {/* Always square, so the picture is never stretched however long the text is. */}
-          <div className="relative aspect-square bg-[#f7f3ed]">
+          <div className="relative aspect-square bg-paper-2">
             <ProductImage product={product} />
             {product.details && <FragranceChips details={product.details} />}
           </div>
           {/* Wide screens: this column is exactly as tall as the picture (the content is laid over it), so the pop-up never
               grows with the text; the description scrolls instead. Narrow screens: stacked, description height capped. */}
           <div className="relative min-w-0">
-          <div className="p-6 sm:p-8 flex flex-col gap-4 lg:p-6 lg:gap-3 lg:absolute lg:inset-0">
-            <div className="shrink-0 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 lg:pr-10">
-              <h2 className="font-serif-display text-3xl font-bold leading-tight min-w-0 flex-1 basis-48 pr-8 lg:pr-0 [overflow-wrap:anywhere]">{product.name}</h2>
-              <p className="text-xl font-bold text-[#695282] shrink-0">{formatPrice(product.priceCents)}</p>
-            </div>
-            {product.details && <FragranceBox details={product.details} />}
-            {/* Wide screens: the notes box and the description scroll together under the fixed perfume box. Narrow screens:
-                the page scrolls and only the description is height-capped, as before. */}
-            {(product.details?.notes || description) && (
-              <div
-                className="flex flex-col gap-4 min-h-0 lg:flex-1 lg:overflow-y-auto [scrollbar-gutter:stable] [scrollbar-width:thin] [scrollbar-color:#c9b6dc_transparent]"
-                tabIndex={0}
-                aria-label="Product details"
-              >
-                {product.details?.notes && <NotesBox notes={product.details.notes} />}
-                {/* Already cleaned by the server (allow-listed tags only), so it is safe to show as HTML. */}
-                {description && (
-                  <div
-                    className="rich-text text-sm text-[#4a454e] leading-relaxed overflow-y-auto max-h-[max(6rem,20vh)] lg:max-h-none lg:overflow-visible [scrollbar-gutter:stable] [scrollbar-width:thin] [scrollbar-color:#c9b6dc_transparent]"
-                    aria-label="Product description"
-                    dangerouslySetInnerHTML={{ __html: description }}
-                  />
-                )}
+            <div className="flex flex-col gap-4 p-6 sm:p-8 lg:absolute lg:inset-0 lg:gap-3 lg:p-6">
+              <div className="flex shrink-0 flex-wrap items-baseline justify-between gap-x-4 gap-y-1 lg:pr-12">
+                <h2 className="min-w-0 flex-1 basis-48 pr-12 font-display text-3xl font-bold leading-tight [overflow-wrap:anywhere] lg:pr-0">{product.name}</h2>
+                <p className="num shrink-0 text-xl font-bold text-accent-deep">{formatPrice(product.priceCents)}</p>
               </div>
-            )}
-            <div className="mt-auto pt-1 space-y-1.5 shrink-0">
-              <button
-                disabled
-                className="w-full py-4 lg:py-3.5 rounded-2xl bg-[#c9c3cc] text-white font-bold text-sm cursor-not-allowed flex items-center justify-center gap-2"
-              >
-                <ShoppingBag className="w-4 h-4" />
-                {product.inStock ? 'ADD TO CART' : 'SOLD OUT'}
-              </button>
-              {product.inStock && <p className="text-xs text-center text-[#7b757e]">Ordering opens soon.</p>}
+              {product.details && <FragranceBox details={product.details} />}
+              {/* Wide screens: the notes and the description scroll together under the fixed perfume box. Narrow screens:
+                  the page scrolls and only the description is height-capped. */}
+              {(product.details?.notes || description) && (
+                <div
+                  className="flex min-h-0 flex-col gap-4 [scrollbar-color:var(--color-muted)_transparent] [scrollbar-gutter:stable] [scrollbar-width:thin] lg:flex-1 lg:overflow-y-auto"
+                  tabIndex={0}
+                  aria-label="Product details"
+                >
+                  {product.details?.notes && <NotesBox notes={product.details.notes} />}
+                  {/* Already cleaned by the server (allow-listed tags only), so it is safe to show as HTML. */}
+                  {description && (
+                    <div
+                      className="rich-text max-h-[max(6rem,20vh)] overflow-y-auto text-sm leading-relaxed text-ink-2 [scrollbar-color:var(--color-muted)_transparent] [scrollbar-gutter:stable] [scrollbar-width:thin] lg:max-h-none lg:overflow-visible"
+                      aria-label="Product description"
+                      dangerouslySetInnerHTML={{ __html: description }}
+                    />
+                  )}
+                </div>
+              )}
+              <div className="mt-auto shrink-0 space-y-1.5 pt-1">
+                <button disabled className="btn btn-primary w-full">
+                  <ShoppingBag className="h-4 w-4" aria-hidden />
+                  {product.inStock ? 'Add to cart' : 'Sold out'}
+                </button>
+                {product.inStock && <p className="text-center text-sm text-muted">Ordering opens soon.</p>}
+              </div>
             </div>
-          </div>
           </div>
         </div>
       </div>
