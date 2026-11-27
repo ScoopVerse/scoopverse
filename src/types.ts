@@ -15,6 +15,14 @@ export interface Admin {
 // The listing type. 'scoop' is reserved for later: the admin can't choose it yet.
 export type ProductKind = 'perfume' | 'scoop' | 'other';
 
+// The extra fields of a scoop listing (kind = 'scoop'). The product's price is the Live price.
+export interface ScoopDetails {
+  scoops: number;
+  offlinePriceCents: number; // price for offline orders (no video guaranteed), never above the live price
+  beadsMin: number; // about how many perfume beads (= 2 ml decants) the whole order gives; filler and +1 beads don't count
+  beadsMax: number;
+}
+
 // The extra fields of a perfume listing (kind = 'perfume').
 export interface PerfumeDetails {
   inspiredBy: string; // e.g. "Versace Eros"
@@ -33,16 +41,21 @@ export interface PerfumeNotes {
 }
 
 // What the public shop sees. The description comes only with the single-product request, not the list.
-export interface Product {
+// The kind decides what "details" holds (null on older listings saved before the type had details).
+export type KindDetails =
+  | { kind: 'perfume'; details: PerfumeDetails | null }
+  | { kind: 'scoop'; details: ScoopDetails | null }
+  | { kind: 'other'; details: null };
+
+export type Product = {
   id: string;
   name: string;
   description?: string;
   priceCents: number;
   inStock: boolean;
-  imageUrl: string | null;
-  kind: ProductKind;
-  details: PerfumeDetails | null;
-}
+  imageUrl: string | null; // the cover picture
+  images?: string[]; // every picture in order (cover first); only with the single-product request
+} & KindDetails;
 
 // The cropped part of a picture, in percent of the full picture.
 export interface CropArea {
@@ -52,20 +65,25 @@ export interface CropArea {
   height: number;
 }
 
-// What the admin sees: also the stock count, whether it's visible in the shop, and the saved crop.
-export interface AdminProduct {
+// One saved picture of a listing, as the admin sees it.
+export interface AdminImage {
+  id: string;
+  url: string;
+  hasOriginal: boolean; // the full photo is saved on the server (admin can re-crop it)
+  crop: CropArea | null;
+}
+
+// What the admin sees: also the stock count, whether it's visible in the shop, and every picture (the first is the cover).
+export type AdminProduct = {
   id: string;
   name: string;
   description: string;
   priceCents: number;
   stock: number;
   active: boolean;
-  imageUrl: string | null;
-  hasOriginal: boolean; // the full photo is saved on the server (admin can re-crop it)
-  crop: CropArea | null;
-  kind: ProductKind;
-  details: PerfumeDetails | null;
-}
+  imageUrl: string | null; // the cover (first) picture
+  images: AdminImage[];
+} & KindDetails;
 
 export type DeviceViewport = 'responsive' | 'desktop' | 'tablet' | 'mobile';
 

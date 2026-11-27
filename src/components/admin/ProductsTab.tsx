@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { Crop, ImagePlus, Package, Pencil, Plus, Trash2, X } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { ChevronLeft, ChevronRight, Crop, ImagePlus, Package, Pencil, Plus, Trash2, X } from 'lucide-react';
 import type { AdminProduct, CropArea } from '../../types';
 import { centsToDollars, dollarsToCents, formatPrice } from '../../money';
 import { Dialog } from './CustomersTab';
@@ -13,6 +13,23 @@ interface Props {
 
 const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 const ORIGINAL_MAX_BYTES = 30 * 1024 * 1024; // must match the server
+const MAX_PICTURES = 6; // must match the server
+
+// One picture in the form. `photo` is set when it was changed here and not saved yet (see the form's state).
+interface Pic {
+  key: string;
+  id?: string; // missing = a new picture, not saved yet
+  url: string; // the saved (cropped) picture
+  hasOriginal: boolean;
+  crop: CropArea | null;
+  photo?: File;
+  upload?: boolean;
+  preview?: string;
+}
+const fromProduct = (p: AdminProduct): Pic[] => p.images.map((i) => ({ key: `s${i.id}`, id: i.id, url: i.url, hasOriginal: i.hasOriginal, crop: i.crop }));
+
+// Thrown inside the save when the server says the admin's session has ended.
+class SessionEnded extends Error {}
 
 const inputClass =
   'w-full px-4 py-3 rounded-2xl bg-[#f7f3ed] border border-[#e6e2dc] focus:border-[#9d84b7] focus:bg-white focus:outline-hidden text-sm transition-all text-[#1c1c18] placeholder-[#7b757e]';
@@ -269,7 +286,7 @@ export const ProductsTab: React.FC<Props> = ({ onSessionExpired }) => {
 
 const Thumb: React.FC<{ url: string | null; className?: string }> = ({ url, className = '' }) =>
   url ? (
-    <img src={url} alt="" loading="lazy" className={`object-cover rounded-2xl bg-[#f7f3ed] ${className}`} />
+    <img src={url} alt="" loading="lazy" draggable={false} className={`object-cover rounded-2xl bg-[#f7f3ed] ${className}`} />
   ) : (
     <span className={`rounded-2xl bg-[#f7f3ed] border border-dashed border-[#d9d2dc] text-[#b9b2bd] flex items-center justify-center ${className}`}>
       <ImagePlus className="w-5 h-5" />
@@ -308,7 +325,12 @@ const ProductForm: React.FC<FormProps> = ({ product, onClose, onSaved, onChanged
   const [active, setActive] = useState(product?.active ?? true);
   // Listing type. Only a perfume has its own detail boxes so far.
   const [kind, setKind] = useState<'perfume' | 'scoop' | 'other'>(product?.kind ?? 'other');
-  const pd = product?.details;
+  const pd = product?.kind === 'perfume' ? product.details : null;
+  const sd = product?.kind === 'scoop' ? product.details : null;
+  const [scoops, setScoops] = useState(sd ? String(sd.scoops) : '');
+  const [offlinePrice, setOfflinePrice] = useState(sd ? centsToDollars(sd.offlinePriceCents) : '');
+  const [beadsMin, setBeadsMin] = useState(sd ? String(sd.beadsMin) : '');
+  const [beadsMax, setBeadsMax] = useState(sd ? String(sd.beadsMax) : '');
   const [inspiredBy, setInspiredBy] = useState(pd?.inspiredBy ?? '');
   const [concentration, setConcentration] = useState<'EDP' | 'EDT'>(pd?.concentration ?? 'EDP');
   const [hoursMin, setHoursMin] = useState(pd ? String(pd.hoursMin) : '');
@@ -323,32 +345,62 @@ const ProductForm: React.FC<FormProps> = ({ product, onClose, onSaved, onChanged
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // What the crop screen is showing right now (null = closed). `saved` = the photo came from the server's stored
-  // original, so only the crop needs sending; otherwise the photo itself is uploaded too.
-  const [draft, setDraft] = useState<{ file: File; saved: boolean; initial: CropArea | null } | null>(null);
-  // A picture change waiting for "Save": the full photo and the chosen crop.
-  const [pending, setPending] = useState<{ file: File; crop: CropArea; upload: boolean } | null>(null);
-  const [pendingUrl, setPendingUrl] = useState<string | null>(null);
+  // The form's pictures, in order (the first is the cover). Saved ones have an id. Changes wait for "Save":
+  // `photo` is the full photo of a changed picture (shown through `preview`); `upload` says whether it must be sent
+  // (a new picture, or a replacement) or only its crop changed (the server already has the original).
+  const [pics, setPics] = useState<Pic[]>(() => (product ? fromProduct(product) : []));
+  const [removedIds, setRemovedIds] = useState<string[]>([]);
+  // What the crop screen is showing right now (null = closed; key null = a new picture), and chosen files waiting their turn.
+  const [draft, setDraft] = useState<{ key: string | null; file: File; initial: CropArea | null; upload: boolean } | null>(null);
+  const [queue, setQueue] = useState<File[]>([]);
+  const [dragKey, setDragKey] = useState<string | null>(null);
+  const nextKey = useRef(0);
+  const blobUrls = useRef<string[]>([]);
+  useEffect(() => () => blobUrls.current.forEach((u) => URL.revokeObjectURL(u)), []);
 
-  useEffect(() => {
-    if (!pending) return setPendingUrl(null);
-    const url = URL.createObjectURL(pending.file);
-    setPendingUrl(url);
-    return () => URL.revokeObjectURL(url);
-  }, [pending?.file]);
-
-  // Big phone photos are fine: the server shrinks them (max 30 MB to upload).
-  const choose = (f: File | undefined) => {
-    if (!f) return;
-    if (!IMAGE_TYPES.includes(f.type)) return setError('Please choose a JPG, PNG or WebP image.');
-    if (f.size > ORIGINAL_MAX_BYTES) return setError('That image is too big (max 30 MB).');
-    setError(null);
-    setDraft({ file: f, saved: false, initial: null });
+  // Big phone photos are fine: the server shrinks them (max 30 MB to upload). Several can be chosen at once; each opens the crop screen in turn.
+  const choose = (list: FileList | null) => {
+    const files = [...(list ?? [])];
+    if (files.length === 0) return;
+    if (files.some((f) => !IMAGE_TYPES.includes(f.type))) return setError('Please choose JPG, PNG or WebP images.');
+    if (files.some((f) => f.size > ORIGINAL_MAX_BYTES)) return setError('That image is too big (max 30 MB).');
+    const room = MAX_PICTURES - pics.length;
+    setError(files.length > room ? `A listing can have up to ${MAX_PICTURES} pictures, so only the first ${room} will be added.` : null);
+    const [first, ...rest] = files.slice(0, room);
+    setQueue(rest);
+    setDraft({ key: null, file: first, initial: null, upload: true });
   };
 
   const applyCrop = (crop: CropArea) => {
-    if (draft) setPending({ file: draft.file, crop, upload: !draft.saved });
+    if (!draft) return;
+    const preview = URL.createObjectURL(draft.file);
+    blobUrls.current.push(preview);
+    if (draft.key === null) {
+      setPics((list) => [...list, { key: `n${nextKey.current++}`, url: preview, hasOriginal: true, crop, photo: draft.file, upload: true, preview }]);
+    } else {
+      setPics((list) => list.map((x) => (x.key === draft.key ? { ...x, crop, photo: draft.file, upload: draft.upload, preview } : x)));
+    }
+    const [next, ...rest] = queue;
+    setQueue(rest);
+    setDraft(next ? { key: null, file: next, initial: null, upload: true } : null);
+  };
+  const cancelCrop = () => {
     setDraft(null);
+    setQueue([]);
+  };
+
+  // Put the picture with this key at position `to`.
+  const movePic = (key: string, to: number) =>
+    setPics((list) => {
+      const from = list.findIndex((x) => x.key === key);
+      if (from < 0 || to < 0 || to >= list.length) return list;
+      const next = [...list];
+      next.splice(to, 0, next.splice(from, 1)[0]);
+      return next;
+    });
+  const removePic = (p: Pic) => {
+    if (p.id) setRemovedIds((ids) => [...ids, p.id!]);
+    setPics((list) => list.filter((x) => x.key !== p.key));
   };
 
   const submit = async (e: React.FormEvent) => {
@@ -359,6 +411,15 @@ const ProductForm: React.FC<FormProps> = ({ product, onClose, onSaved, onChanged
     if (!/^\d{1,7}$/.test(stock.trim()) || stockNumber > 1_000_000) return setError('Stock must be a whole number from 0 to 1,000,000.');
 
     let details = null;
+    if (kind === 'scoop') {
+      const offlinePriceCents = dollarsToCents(offlinePrice);
+      const whole = (t: string) => (/^\d{1,3}$/.test(t.trim()) ? Number(t) : NaN);
+      const [n, lo, hi] = [whole(scoops), whole(beadsMin), whole(beadsMax)];
+      if (!(n >= 1 && n <= 20)) return setError('Enter the number of scoops as a whole number from 1 to 20.');
+      if (offlinePriceCents === null || offlinePriceCents > priceCents) return setError('The offline price must be a price like 11.50, not higher than the live price.');
+      if (!(lo >= 1 && hi <= 500 && lo <= hi)) return setError('Enter the perfumes as whole numbers, e.g. 3 to 5 (the first number not above the second).');
+      details = { scoops: n, offlinePriceCents, beadsMin: lo, beadsMax: hi };
+    }
     if (kind === 'perfume') {
       const min = Number(hoursMin);
       const max = Number(hoursMax);
@@ -385,29 +446,42 @@ const ProductForm: React.FC<FormProps> = ({ product, onClose, onSaved, onChanged
       let result: AdminProduct = data.product;
       const isNew = !saved;
 
-      if (pending) {
-        const { x, y, width, height } = pending.crop;
-        const up = pending.upload
-          ? await fetch(`/api/admin/products/${result.id}/image?crop=${x},${y},${width},${height}`, {
-              method: 'PUT',
-              headers: { 'Content-Type': pending.file.type },
-              body: pending.file,
-            })
-          : await fetch(`/api/admin/products/${result.id}/crop`, {
-              method: 'PUT',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(pending.crop),
-            });
-        if (up.status === 401) return onSessionExpired();
-        const upData = await up.json().catch(() => ({}));
-        if (!up.ok) {
-          // The details are saved; only the picture failed. Stay open so it can be retried.
-          onChanged(result);
-          setSaved(result);
-          return setError(`Saved, but the image was not uploaded: ${upData.error ?? 'please try again.'}`);
+      // The details are saved. Now the pictures: removals first (to free slots), then each change, then the order.
+      let latest = result;
+      try {
+        const call = async (method: string, url: string, body?: BodyInit, type?: string) => {
+          const r = await fetch(url, { method, headers: type ? { 'Content-Type': type } : undefined, body });
+          if (r.status === 401) throw new SessionEnded();
+          const d = await r.json().catch(() => ({}));
+          if (!r.ok) throw new Error(d.error ?? 'please try again.');
+          latest = d.product as AdminProduct;
+          return latest;
+        };
+        const base = `/api/admin/products/${result.id}/images`;
+        for (const id of removedIds) await call('DELETE', `${base}/${id}`);
+        const ids: string[] = [];
+        for (const p of pics) {
+          const q = p.crop ? `?crop=${p.crop.x},${p.crop.y},${p.crop.width},${p.crop.height}` : '';
+          if (!p.id) {
+            const r = await call('POST', base + q, p.photo, p.photo!.type);
+            ids.push(r.images[r.images.length - 1].id); // new pictures are added at the end
+          } else {
+            ids.push(p.id);
+            if (p.photo && p.upload) await call('PUT', `${base}/${p.id}${q}`, p.photo, p.photo.type);
+            else if (p.photo) await call('PUT', `${base}/${p.id}/crop`, JSON.stringify(p.crop), 'application/json');
+          }
         }
-        result = upData.product;
+        if (ids.join() !== latest.images.map((i) => i.id).join()) await call('PUT', `${base}/order`, JSON.stringify({ ids }), 'application/json');
+      } catch (err) {
+        if (err instanceof SessionEnded) return onSessionExpired();
+        // The details are saved and some pictures may be too. Show what the server has so the rest can be redone.
+        onChanged(latest);
+        setSaved(latest);
+        setPics(fromProduct(latest));
+        setRemovedIds([]);
+        return setError(`Saved, but not all pictures were saved: ${(err as Error).message} The pictures shown are what is saved now; please redo the rest.`);
       }
+      onSaved(latest, isNew);
       onSaved(result, isNew);
     } catch {
       setError('Could not reach the server. Please try again.');
@@ -416,19 +490,16 @@ const ProductForm: React.FC<FormProps> = ({ product, onClose, onSaved, onChanged
     }
   };
 
-  const hasPicture = !!pending || !!saved?.imageUrl;
-
   // Reopen the crop screen on the full photo, with the crop used last time. Pictures saved before originals were
   // kept (no stored original) fall back to cropping the saved picture itself.
-  const startCrop = async () => {
-    if (pending) return setDraft({ file: pending.file, saved: !pending.upload, initial: pending.crop });
-    if (!saved?.imageUrl) return;
+  const startCrop = async (pic: Pic) => {
+    if (pic.photo) return setDraft({ key: pic.key, file: pic.photo, initial: pic.crop, upload: !!pic.upload });
+    if (!pic.id || !saved) return;
     setBusy(true);
     setError(null);
     try {
-      const fromServer = saved.hasOriginal;
-      const blob = await (await fetch(fromServer ? `/api/admin/products/${saved.id}/original` : saved.imageUrl)).blob();
-      setDraft({ file: new File([blob], 'photo.webp', { type: blob.type }), saved: fromServer, initial: fromServer ? saved.crop : null });
+      const blob = await (await fetch(pic.hasOriginal ? `/api/admin/products/${saved.id}/images/${pic.id}/original` : pic.url)).blob();
+      setDraft({ key: pic.key, file: new File([blob], 'photo.webp', { type: blob.type }), initial: pic.hasOriginal ? pic.crop : null, upload: !pic.hasOriginal });
     } catch {
       setError('Could not load the picture. Please try again.');
     } finally {
@@ -458,34 +529,87 @@ const ProductForm: React.FC<FormProps> = ({ product, onClose, onSaved, onChanged
           </button>
           <h2 className="font-serif-display text-2xl font-bold pr-10">{saved ? 'Edit product' : 'Add product'}</h2>
 
-          <div className="flex items-center gap-4">
-            {pending && pendingUrl ? (
-              <CropPreview url={pendingUrl} crop={pending.crop} className="w-24 h-24 shrink-0" />
-            ) : (
-              <Thumb url={saved?.imageUrl ?? null} className="w-24 h-24 shrink-0" />
-            )}
-            <div className="space-y-1.5 min-w-0">
-              <label className="inline-flex items-center gap-2 text-sm font-bold text-[#695282] hover:text-[#533d6b] bg-white px-4 py-2 rounded-full border border-[#9d84b7]/30 hover:border-[#9d84b7]/60 cursor-pointer transition-all focus-within:ring-2 focus-within:ring-[#9d84b7]">
-                <ImagePlus className="w-4 h-4" />
-                {hasPicture ? 'Change image' : 'Choose image'}
-                <input
-                  type="file"
-                  accept={IMAGE_TYPES.join(',')}
-                  className="sr-only"
-                  onChange={(e) => {
-                    choose(e.target.files?.[0]);
-                    e.target.value = ''; // so picking the same file again still opens the crop screen
+          <div className="space-y-2">
+            <span className={labelClass}>
+              Pictures ({pics.length} of {MAX_PICTURES})
+            </span>
+            <ul className="flex flex-wrap gap-3">
+              {pics.map((p, i) => (
+                <li
+                  key={p.key}
+                  draggable
+                  onDragStart={() => setDragKey(p.key)}
+                  onDragEnd={() => setDragKey(null)}
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={() => {
+                    if (dragKey && dragKey !== p.key) movePic(dragKey, i);
+                    setDragKey(null);
                   }}
-                />
-              </label>
-              {hasPicture && (
-                <button type="button" onClick={startCrop} disabled={busy} className="ml-2 inline-flex items-center gap-1.5 text-sm font-bold text-[#695282] hover:text-[#533d6b] underline underline-offset-2 disabled:opacity-60">
-                  <Crop className="w-4 h-4" />
-                  Crop
-                </button>
+                  className={`relative w-24 shrink-0 cursor-grab ${dragKey === p.key ? 'opacity-40' : ''}`}
+                >
+                  {p.preview && p.crop ? <CropPreview url={p.preview} crop={p.crop} className="w-24 h-24" /> : <Thumb url={p.url} className="w-24 h-24" />}
+                  {i === 0 && <span className="absolute left-1.5 top-1.5 rounded-full bg-[#695282] px-2 py-0.5 text-[0.7rem] font-bold text-white">Cover</span>}
+                  <button
+                    type="button"
+                    onClick={() => removePic(p)}
+                    aria-label={`Remove picture ${i + 1}`}
+                    className="absolute right-1.5 top-1.5 flex h-6 w-6 items-center justify-center rounded-full bg-white/90 text-[#a33a3a] shadow-sm hover:bg-white"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                  <div className="mt-1.5 flex items-center justify-between">
+                    <button
+                      type="button"
+                      onClick={() => movePic(p.key, i - 1)}
+                      disabled={i === 0}
+                      aria-label={`Move picture ${i + 1} earlier`}
+                      className="flex h-7 w-7 items-center justify-center rounded-full text-[#695282] hover:bg-[#efdbff]/50 disabled:opacity-30"
+                    >
+                      <ChevronLeft className="w-4 h-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => startCrop(p)}
+                      disabled={busy}
+                      aria-label={`Crop picture ${i + 1}`}
+                      className="flex h-7 w-7 items-center justify-center rounded-full text-[#695282] hover:bg-[#efdbff]/50 disabled:opacity-40"
+                    >
+                      <Crop className="w-4 h-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => movePic(p.key, i + 1)}
+                      disabled={i === pics.length - 1}
+                      aria-label={`Move picture ${i + 1} later`}
+                      className="flex h-7 w-7 items-center justify-center rounded-full text-[#695282] hover:bg-[#efdbff]/50 disabled:opacity-30"
+                    >
+                      <ChevronRight className="w-4 h-4" />
+                    </button>
+                  </div>
+                </li>
+              ))}
+              {pics.length < MAX_PICTURES && (
+                <li className="w-24 shrink-0">
+                  <label className="flex h-24 w-24 cursor-pointer flex-col items-center justify-center gap-1 rounded-2xl border border-dashed border-[#9d84b7]/60 bg-[#faf8f5] text-center text-xs font-bold text-[#695282] transition-all hover:bg-[#efdbff]/40 focus-within:ring-2 focus-within:ring-[#9d84b7]">
+                    <ImagePlus className="w-5 h-5" />
+                    {pics.length === 0 ? 'Add pictures' : 'Add more'}
+                    <input
+                      type="file"
+                      multiple
+                      accept={IMAGE_TYPES.join(',')}
+                      className="sr-only"
+                      onChange={(e) => {
+                        choose(e.target.files);
+                        e.target.value = ''; // so picking the same file again still opens the crop screen
+                      }}
+                    />
+                  </label>
+                </li>
               )}
-              <p className="text-xs text-[#7b757e]">JPG, PNG or WebP. You can crop and zoom it next.</p>
-            </div>
+            </ul>
+            <p className="text-xs text-[#7b757e]">
+              JPG, PNG or WebP, up to {MAX_PICTURES}. Drag a picture to reorder (or use the arrows). The first one is the cover shown on the shop tiles. Each is cropped to a square.
+            </p>
           </div>
 
           <div className="space-y-2">
@@ -508,6 +632,30 @@ const ProductForm: React.FC<FormProps> = ({ product, onClose, onSaved, onChanged
             <label htmlFor="product-name" className={labelClass}>Name</label>
             <input id="product-name" required maxLength={120} value={name} onChange={(e) => setName(e.target.value)} className={inputClass} placeholder="e.g. Midnight Vanilla Scoop" />
           </div>
+          {kind === 'scoop' && (
+            <fieldset className="rounded-2xl border border-[#e3d2f3] bg-[#f8f1fd]/60 p-4 sm:p-5 space-y-4">
+              <legend className="px-2 text-xs font-bold uppercase tracking-wider text-[#695282]">Scoop details (shown in a box in the shop)</legend>
+              <div className="grid sm:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label htmlFor="scoop-count" className={labelClass}>Number of scoops</label>
+                  <input id="scoop-count" inputMode="numeric" maxLength={2} value={scoops} onChange={(e) => setScoops(e.target.value)} className={inputClass} placeholder="1, 3 or 5" />
+                </div>
+                <div className="space-y-2">
+                  <label htmlFor="scoop-offline" className={labelClass}>Offline price (RM)</label>
+                  <input id="scoop-offline" inputMode="decimal" value={offlinePrice} onChange={(e) => setOfflinePrice(e.target.value)} className={inputClass} placeholder="Lower than the live price" />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <span className={labelClass}>Perfumes you get in total (about, not counting filler and +1 beads)</span>
+                <div className="flex items-center gap-2 sm:max-w-xs">
+                  <input aria-label="Perfumes from" inputMode="numeric" maxLength={3} value={beadsMin} onChange={(e) => setBeadsMin(e.target.value)} className={`${inputClass} text-center`} placeholder="3" />
+                  <span className="text-[#7b757e] font-bold">to</span>
+                  <input aria-label="Perfumes up to" inputMode="numeric" maxLength={3} value={beadsMax} onChange={(e) => setBeadsMax(e.target.value)} className={`${inputClass} text-center`} placeholder="5" />
+                </div>
+                <p className="text-xs text-[#7b757e]">e.g. 1 scoop: 3 to 5. 5 scoops: about 22 to 28. The Price below is the Live price.</p>
+              </div>
+            </fieldset>
+          )}
           {kind === 'perfume' && (
             <fieldset className="rounded-2xl border border-[#e3d2f3] bg-[#f8f1fd]/60 p-4 sm:p-5 space-y-4">
               <legend className="px-2 text-xs font-bold uppercase tracking-wider text-[#695282]">Perfume details (shown in a box in the shop)</legend>
@@ -574,7 +722,7 @@ const ProductForm: React.FC<FormProps> = ({ product, onClose, onSaved, onChanged
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <label htmlFor="product-price" className={labelClass}>Price (RM)</label>
+              <label htmlFor="product-price" className={labelClass}>{kind === 'scoop' ? 'Live price (RM)' : 'Price (RM)'}</label>
               <input id="product-price" required inputMode="decimal" value={price} onChange={(e) => setPrice(e.target.value)} className={inputClass} placeholder="12.50" />
             </div>
             <div className="space-y-2">
@@ -603,7 +751,7 @@ const ProductForm: React.FC<FormProps> = ({ product, onClose, onSaved, onChanged
         </form>
       </div>
     </div>
-    {draft && <ImageCropper file={draft.file} initialArea={draft.initial} onCancel={() => setDraft(null)} onDone={applyCrop} />}
+    {draft && <ImageCropper key={`${draft.key}-${draft.file.size}-${draft.file.lastModified}`} file={draft.file} initialArea={draft.initial} onCancel={cancelCrop} onDone={applyCrop} />}
     </>
   );
 };

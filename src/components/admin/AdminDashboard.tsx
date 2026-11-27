@@ -3,6 +3,7 @@ import { LayoutDashboard, LogOut, Package, Radio, ShieldCheck, ShoppingBag, User
 import type { Admin } from '../../types';
 import { CustomersTab } from './CustomersTab';
 import { ProductsTab } from './ProductsTab';
+import { LiveTab } from './LiveTab';
 
 const TABS = [
   { id: 'overview', label: 'Overview', icon: LayoutDashboard },
@@ -118,6 +119,8 @@ export const AdminDashboard: React.FC<Props> = ({ admin, onLogout }) => {
           </>
         ) : tab === 'customers' ? (
           <CustomersTab onSessionExpired={onLogout} />
+        ) : tab === 'live' ? (
+          <LiveTab onSessionExpired={onLogout} />
         ) : tab === 'products' ? (
           <ProductsTab onSessionExpired={onLogout} />
         ) : (

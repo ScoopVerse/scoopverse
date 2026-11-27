@@ -82,10 +82,11 @@ its own box in the shop: what it is inspired by, EDP or EDT, how many hours it l
 A second, optional box shows the top, heart and base notes (up to 10 per row, 30 characters each, typed as comma-separated text).
 They are stored in the `kind` and `details` (JSON) columns; the server checks them, and the shop shows them as plain text.
 
-Each product keeps **one original** (the uploaded photo, max 2400 px, `uploads/originals/`, never
-served publicly) and **one cropped shop picture** (max 1200 px, `uploads/products/`). Cropping again
-replaces the shop picture; the crop settings are saved so the crop screen reopens as it was. Both are
-WebP with random names. `uploads/` is not in Git: **include it in server backups** and keep it on the
+A product has up to **6 pictures** (the `product_images` table), in an order the admin sets by drag and drop;
+the first is the cover the shop tiles show. Each picture keeps **one original** (the uploaded photo, max 2400 px,
+`uploads/originals/`, never served publicly) and **one cropped shop picture** (max 1200 px, `uploads/products/`).
+Cropping again replaces the shop picture; the crop settings are saved so the crop screen reopens as it was. Both
+are WebP with random names. `products.image` mirrors the cover so the shop's list needs no join. `uploads/` is not in Git: **include it in server backups** and keep it on the
 same disk when deploying (`npm run build` does not touch it).
 
 ## API
@@ -111,10 +112,13 @@ same disk when deploying (`npm run build` does not touch it).
 | GET/POST | `/api/admin/products` | admin: list all / `{ name, description, priceCents, stock, active, kind, details }` (`kind` = `perfume` or `other`; a perfume needs `details`: `{ inspiredBy, concentration, hoursMin, hoursMax, tagline, notes: { top, heart, base } }`) |
 | PATCH  | `/api/admin/products/:id/active` | `{ active }`: show or hide a product, changes nothing else |
 | POST   | `/api/admin/products/batch-delete` | `{ ids }` (1–100) → `{ deleted }`; removes the products and their picture files |
-| PATCH/DELETE | `/api/admin/products/:id` | admin: same body as create / delete (also removes its picture) |
-| PUT    | `/api/admin/products/:id/image?crop=x,y,w,h` | admin: raw JPG/PNG/WebP photo (`Content-Type: image/*`, max 30 MB); crop in percent, optional |
-| PUT    | `/api/admin/products/:id/crop` | admin: `{ x, y, width, height }` re-crops the saved original; replaces the shop picture |
-| GET    | `/api/admin/products/:id/original` | admin only: the full saved photo (for the crop screen) |
+| PATCH/DELETE | `/api/admin/products/:id` | admin: same body as create / delete (also removes its pictures) |
+| POST   | `/api/admin/products/:id/images?crop=x,y,w,h` | admin: adds a picture at the end (max 6); raw JPG/PNG/WebP photo (`Content-Type: image/*`, max 30 MB); crop in percent, optional → `{ product }` |
+| PUT    | `/api/admin/products/:id/images/order` | admin: `{ ids }` lists every picture id of the product in the new order |
+| PUT    | `/api/admin/products/:id/images/:imageId?crop=` | admin: replaces that picture's photo (same body as adding) |
+| PUT    | `/api/admin/products/:id/images/:imageId/crop` | admin: `{ x, y, width, height }` re-crops the saved original; replaces the shop picture |
+| GET    | `/api/admin/products/:id/images/:imageId/original` | admin only: the full saved photo (for the crop screen) |
+| DELETE | `/api/admin/products/:id/images/:imageId` | admin: removes one picture and its files |
 | POST   | `/api/admin/customers/batch-delete` | `{ ids }` (1–50) → `{ deleted }` |
 | POST   | `/api/admin/customers/batch-reset` | `{ ids }` (1–20) → `{ sent, failed }`; 10 requests per 15 min |
 

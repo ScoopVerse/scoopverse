@@ -1,12 +1,14 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Clock, Droplets, ShoppingBag, Sparkles, X } from 'lucide-react';
-import type { PerfumeDetails, PerfumeNotes, Product } from '../types';
+import { ChevronLeft, ChevronRight, Clock, Droplets, Package, Radio, ShoppingBag, Sparkles, X } from 'lucide-react';
+import type { PerfumeDetails, PerfumeNotes, Product, ScoopDetails } from '../types';
 import { formatPrice } from '../money';
 import { useAccount } from '../useAccount';
+import { useLive } from '../useLive';
 import { AuthModal } from './AuthModal';
 import { SiteNav } from './SiteNav';
 import { SiteFooter } from './SiteFooter';
 import { ProductTile } from './ProductTile';
+import { LegendBeads, LegendModal } from './Legend';
 
 type Filter = 'all' | 'perfume' | 'scoop' | 'other';
 type Sort = 'newest' | 'price-asc' | 'price-desc';
@@ -29,6 +31,7 @@ export const ShopPage: React.FC = () => {
   const [filter, setFilter] = useState<Filter>('all');
   const [sort, setSort] = useState<Sort>('newest');
   const [openId, setOpenId] = useState<string | null>(hashId);
+  const live = useLive();
 
   useEffect(() => {
     document.title = 'Shop — ScoopVerse';
@@ -160,7 +163,7 @@ export const ShopPage: React.FC = () => {
             <ul className="grid grid-cols-2 gap-x-6 gap-y-10 lg:grid-cols-3 xl:grid-cols-4">
               {shown.map((p, i) => (
                 <li key={p.id}>
-                  <ProductTile product={p} onOpen={() => open(p)} eager={i < 4} />
+                  <ProductTile product={p} onOpen={() => open(p)} eager={i < 4} live={live} />
                 </li>
               ))}
             </ul>
@@ -170,7 +173,7 @@ export const ShopPage: React.FC = () => {
 
       <SiteFooter />
 
-      {openProduct && <ProductDetail product={openProduct} onClose={close} />}
+      {openProduct && <ProductDetail product={openProduct} onClose={close} live={live} />}
       <AuthModal
         open={authOpen}
         onClose={() => setAuthOpen(false)}
@@ -183,9 +186,9 @@ export const ShopPage: React.FC = () => {
   );
 };
 
-const ProductImage: React.FC<{ product: Product }> = ({ product }) =>
-  product.imageUrl ? (
-    <img src={product.imageUrl} alt={product.name} className={`h-full w-full object-cover ${product.inStock ? '' : 'opacity-60'}`} />
+const ProductImage: React.FC<{ product: Product; src: string | null }> = ({ product, src }) =>
+  src ? (
+    <img src={src} alt={product.name} className={`h-full w-full object-cover ${product.inStock ? '' : 'opacity-60'}`} />
   ) : (
     <div className="flex h-full w-full items-center justify-center bg-paper-3 text-accent">
       <Sparkles className="h-10 w-10" aria-hidden />
@@ -195,10 +198,11 @@ const ProductImage: React.FC<{ product: Product }> = ({ product }) =>
 const CONCENTRATION_NAME = { EDP: 'Eau de Parfum', EDT: 'Eau de Toilette' };
 
 // Strength and staying power as two chips laid over the picture's bottom edge.
-const FragranceChips: React.FC<{ details: PerfumeDetails }> = ({ details: d }) => {
+const FragranceChips: React.FC<{ details: PerfumeDetails; lifted: boolean }> = ({ details: d, lifted }) => {
   const chip = 'inline-flex items-center gap-1.5 rounded-full bg-paper px-3 py-1.5 text-xs font-bold text-accent-deep';
   return (
-    <div className="absolute bottom-4 left-4 right-4 flex flex-wrap gap-2">
+    // Lifted above the thumbnail strip when the listing has more than one picture.
+    <div className={`absolute left-4 right-4 flex flex-wrap gap-2 ${lifted ? 'bottom-20' : 'bottom-4'}`}>
       <span className={chip}>
         <Droplets className="h-3.5 w-3.5 text-accent" aria-hidden />
         {d.concentration} <span className="font-semibold text-muted">{CONCENTRATION_NAME[d.concentration]}</span>
@@ -256,15 +260,97 @@ const NotesBox: React.FC<{ notes: PerfumeNotes }> = ({ notes }) => {
   );
 };
 
-const ProductDetail: React.FC<{ product: Product; onClose: () => void }> = ({ product, onClose }) => {
+// Two things shown in a scoop's pop-up: how many beads you get, and the duplicate rule.
+const ScoopBox: React.FC<{ details: ScoopDetails; onLegend: () => void }> = ({ details: d, onLegend }) => {
+  const stat = 'flex flex-col';
+  return (
+    <div className="shrink-0 space-y-3">
+      <p className="font-display text-lg font-bold leading-snug text-accent-deep">Can’t smell it online? Let the scoop help you decide.</p>
+      <LegendBeads onOpen={onLegend} />
+      <div className="space-y-2.5 rounded-card bg-paper-3 p-3.5">
+        <dl className="grid grid-cols-3 gap-3">
+          <div className={stat}>
+            <dd className="num font-display text-2xl font-bold leading-none text-ink">{d.scoops}</dd>
+            <dt className="mt-1 text-sm text-ink-2">{d.scoops === 1 ? 'scoop' : 'scoops in a row'}</dt>
+          </div>
+          <div className={stat}>
+            <dd className="num font-display text-2xl font-bold leading-none text-ink">{d.beadsMin === d.beadsMax ? d.beadsMin : `${d.beadsMin}–${d.beadsMax}`}</dd>
+            <dt className="mt-1 text-sm text-ink-2">perfumes in total</dt>
+          </div>
+          <div className={stat}>
+            <dd className="num font-display text-2xl font-bold leading-none text-ink">2 ml</dd>
+            <dt className="mt-1 text-sm text-ink-2">per decant</dt>
+          </div>
+        </dl>
+        <p className="text-sm leading-snug text-ink-2">
+          Every scoop gives at least 3 perfumes. Filler beads are blank, and each +1 bead earns an extra scoop after the rest.
+        </p>
+        <p className="flex items-start gap-2 text-sm font-semibold leading-snug text-accent-deep">
+          <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-accent" aria-hidden />
+          Same scent twice? Both 2 ml decants become one 5 ml decant.
+        </p>
+      </div>
+    </div>
+  );
+};
+
+type Mode = 'live' | 'offline';
+
+// Go Live (full price, we scoop on the spot during a live) or Offline (lower price, no video guaranteed).
+const OrderOptions: React.FC<{ details: ScoopDetails; livePrice: number; live: boolean; mode: Mode; onMode: (m: Mode) => void }> = ({
+  details: d,
+  livePrice,
+  live,
+  mode,
+  onMode,
+}) => {
+  const card = 'flex flex-col gap-0.5 rounded-card border-2 p-3 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-60';
+  const pick = (on: boolean) => (on ? 'border-accent bg-paper-3' : 'border-rule bg-paper hover:border-accent');
+  return (
+    <div role="radiogroup" aria-label="How do you want to order?" className="grid shrink-0 grid-cols-2 gap-2">
+      <button type="button" role="radio" aria-checked={mode === 'live'} disabled={!live} onClick={() => onMode('live')} className={`${card} ${pick(mode === 'live')}`}>
+        <span className="flex items-center gap-1.5 text-sm font-bold text-ink">
+          <Radio className="h-4 w-4 text-accent" aria-hidden />
+          Go Live
+        </span>
+        <span className="num font-bold text-accent-deep">{formatPrice(livePrice)}</span>
+        <span className="text-xs leading-snug text-muted">{live ? 'We scoop it on TikTok or IG live.' : 'Not live right now. Opens when we go live.'}</span>
+      </button>
+      <button type="button" role="radio" aria-checked={mode === 'offline'} onClick={() => onMode('offline')} className={`${card} ${pick(mode === 'offline')}`}>
+        <span className="flex items-center gap-1.5 text-sm font-bold text-ink">
+          <Package className="h-4 w-4 text-accent" aria-hidden />
+          Offline
+        </span>
+        <span className="num font-bold text-accent-deep">{formatPrice(d.offlinePriceCents)}</span>
+        <span className="text-xs leading-snug text-muted">Cheaper. We can’t promise a video.</span>
+      </button>
+    </div>
+  );
+};
+
+const ProductDetail: React.FC<{ product: Product; onClose: () => void; live: boolean }> = ({ product, onClose, live }) => {
   // The list doesn't carry descriptions; this one product's comes when its pop-up opens.
   const [description, setDescription] = useState<string | undefined>();
+  // Every picture of the listing (the list only carries the cover), and which one is showing.
+  const [images, setImages] = useState<string[]>(product.imageUrl ? [product.imageUrl] : []);
+  const [shot, setShot] = useState(0);
   const dialogRef = useRef<HTMLDivElement>(null);
+  const perfume = product.kind === 'perfume' ? product.details : null;
+  const scoop = product.kind === 'scoop' ? product.details : null;
+  // Go Live is only on offer while the shop is live; otherwise (or if the live ends while this is open) it's Offline.
+  const [pickedMode, setPickedMode] = useState<Mode | null>(null);
+  // The full list of scents opens over this pop-up; it handles its own Esc and Tab (see Legend.tsx).
+  const [legendOpen, setLegendOpen] = useState(false);
+  const mode: Mode = scoop && live && (pickedMode ?? 'live') === 'live' ? 'live' : 'offline';
+  const price = scoop && mode === 'offline' ? scoop.offlinePriceCents : product.priceCents;
 
   useEffect(() => {
     fetch(`/api/products/${product.id}`)
       .then((res) => (res.ok ? res.json() : null))
-      .then((data) => setDescription(data?.product.description))
+      .then((data) => {
+        setDescription(data?.product.description);
+        if (data?.product.images?.length) setImages(data.product.images);
+      })
       .catch(() => {});
   }, [product.id]);
 
@@ -296,6 +382,7 @@ const ProductDetail: React.FC<{ product: Product; onClose: () => void }> = ({ pr
   }, [onClose]);
 
   return (
+    <>
     <div className="fixed inset-0 z-50 overflow-y-auto bg-ink/40" onClick={onClose}>
       <div className="flex min-h-full items-center justify-center p-4">
         <div
@@ -317,8 +404,38 @@ const ProductDetail: React.FC<{ product: Product; onClose: () => void }> = ({ pr
           </button>
           {/* Always square, so the picture is never stretched however long the text is. */}
           <div className="relative aspect-square bg-paper-2">
-            <ProductImage product={product} />
-            {product.details && <FragranceChips details={product.details} />}
+            <ProductImage product={product} src={images[shot] ?? null} />
+            {perfume && <FragranceChips details={perfume} lifted={images.length > 1} />}
+            {images.length > 1 && (
+              <>
+                {[-1, 1].map((step) => (
+                  <button
+                    key={step}
+                    type="button"
+                    onClick={() => setShot((shot + step + images.length) % images.length)}
+                    aria-label={step < 0 ? 'Previous picture' : 'Next picture'}
+                    className={`absolute top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-paper/90 text-ink-2 transition-colors hover:text-accent ${step < 0 ? 'left-3' : 'right-3'}`}
+                  >
+                    {step < 0 ? <ChevronLeft className="h-5 w-5" aria-hidden /> : <ChevronRight className="h-5 w-5" aria-hidden />}
+                  </button>
+                ))}
+                <ul className="absolute bottom-3 left-1/2 flex -translate-x-1/2 gap-2 rounded-full bg-paper/90 p-1.5" aria-label="Pictures">
+                  {images.map((src, i) => (
+                    <li key={src}>
+                      <button
+                        type="button"
+                        onClick={() => setShot(i)}
+                        aria-label={`Picture ${i + 1} of ${images.length}`}
+                        aria-current={i === shot}
+                        className={`block h-11 w-11 overflow-hidden rounded-full border-2 transition-colors ${i === shot ? 'border-accent' : 'border-transparent hover:border-rule'}`}
+                      >
+                        <img src={src} alt="" className="h-full w-full object-cover" />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
           </div>
           {/* Wide screens: this column is exactly as tall as the picture (the content is laid over it), so the pop-up never
               grows with the text; the description scrolls instead. Narrow screens: stacked, description height capped. */}
@@ -326,18 +443,19 @@ const ProductDetail: React.FC<{ product: Product; onClose: () => void }> = ({ pr
             <div className="flex flex-col gap-4 p-6 sm:p-8 lg:absolute lg:inset-0 lg:gap-3 lg:p-6">
               <div className="flex shrink-0 flex-wrap items-baseline justify-between gap-x-4 gap-y-1 lg:pr-12">
                 <h2 className="min-w-0 flex-1 basis-48 pr-12 font-display text-3xl font-bold leading-tight [overflow-wrap:anywhere] lg:pr-0">{product.name}</h2>
-                <p className="num shrink-0 text-xl font-bold text-accent-deep">{formatPrice(product.priceCents)}</p>
+                <p className="num shrink-0 text-xl font-bold text-accent-deep">{formatPrice(price)}</p>
               </div>
-              {product.details && <FragranceBox details={product.details} />}
+              {perfume && <FragranceBox details={perfume} />}
+              {scoop && <ScoopBox details={scoop} onLegend={() => setLegendOpen(true)} />}
               {/* Wide screens: the notes and the description scroll together under the fixed perfume box. Narrow screens:
                   the page scrolls and only the description is height-capped. */}
-              {(product.details?.notes || description) && (
+              {(perfume?.notes || description) && (
                 <div
                   className="flex min-h-0 flex-col gap-4 [scrollbar-color:var(--color-muted)_transparent] [scrollbar-gutter:stable] [scrollbar-width:thin] lg:flex-1 lg:overflow-y-auto"
                   tabIndex={0}
                   aria-label="Product details"
                 >
-                  {product.details?.notes && <NotesBox notes={product.details.notes} />}
+                  {perfume?.notes && <NotesBox notes={perfume.notes} />}
                   {/* Already cleaned by the server (allow-listed tags only), so it is safe to show as HTML. */}
                   {description && (
                     <div
@@ -348,7 +466,8 @@ const ProductDetail: React.FC<{ product: Product; onClose: () => void }> = ({ pr
                   )}
                 </div>
               )}
-              <div className="mt-auto shrink-0 space-y-1.5 pt-1">
+              <div className="mt-auto shrink-0 space-y-2 pt-1">
+                {scoop && <OrderOptions details={scoop} livePrice={product.priceCents} live={live} mode={mode} onMode={setPickedMode} />}
                 <button disabled className="btn btn-primary w-full">
                   <ShoppingBag className="h-4 w-4" aria-hidden />
                   {product.inStock ? 'Add to cart' : 'Sold out'}
@@ -360,5 +479,7 @@ const ProductDetail: React.FC<{ product: Product; onClose: () => void }> = ({ pr
         </div>
       </div>
     </div>
+    {legendOpen && <LegendModal onClose={() => setLegendOpen(false)} />}
+    </>
   );
 };
