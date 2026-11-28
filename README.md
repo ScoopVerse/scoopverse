@@ -111,6 +111,26 @@ read-only and the server works it out again, ignoring any state sent; a postcode
 delivery note (up to 200 letters) goes to the courier. Address autocomplete is logged as a `shortcut:` debt in `server/addresses.ts`. The admin sees each customer's addresses (and the default's phone number) on their card in the
 Customers tab, and can edit them there (same checks as in the shop). These fields are what EasyParcel's order and quote calls ask for.
 
+## Delivery area, pickup and free delivery
+
+Delivery is **West Malaysia only** for now: a postcode in Sabah, Sarawak or Labuan is refused in the address form with
+"Sorry, we only deliver to West Malaysia for now." (the list is `EAST_MALAYSIA` in `src/malaysia.ts`; take a code out to
+open it). The admin Overview page has a **Pickup and free delivery** card (`settings` key `shipping`, API
+`GET/PUT /api/admin/shipping`): the pickup address couriers collect from (West Malaysia, state from the postcode) and the
+order total at or above which delivery is free (0 = never free). Until it is saved, placeholders are used (pickup
+postcode 56000, free from RM150): replace them before going live. The delivery fee itself is not a setting, it comes from
+EasyParcel's price per parcel. Planned: one parcel per 2 items by default (3kg, flat rate), the admin can repack.
+
+## EasyParcel link
+
+The shop links to one EasyParcel account through EasyParcel's newer API (OAuth). Set `EASYPARCEL_CLIENT_ID` and
+`EASYPARCEL_CLIENT_SECRET` in `.env`, register `APP_URL + /api/easyparcel/callback` as the app's Redirect URI, then an
+admin clicks **Connect EasyParcel** on the Overview page and allows access. A Sandbox account gives test mode, a Live
+account real shipments (a token can't be converted between them). Tokens are kept in the `settings` table, refreshed
+automatically and never sent to the browser. The callback is trusted by a one-time `state` (10 minutes) made when the
+admin clicks Connect, because the admin cookie is not sent to `/api/easyparcel`. `server/easyparcel.ts` exports
+`easyparcel(path, init)` for the later quote and booking calls.
+
 ## API
 
 | Method | Path                 | Body                        |

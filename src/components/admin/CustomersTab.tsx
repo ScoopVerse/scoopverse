@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { BadgeCheck, BookUser, Check, ChevronDown, ChevronLeft, ChevronRight, KeyRound, Pencil, Phone, Search, Trash2, UserRound, X } from 'lucide-react';
 import type { Address } from '../../types';
-import { nationalPhone, stateForPostcode, stateName } from '../../malaysia';
+import { WEST_ONLY_MESSAGE, deliversTo, nationalPhone, stateForPostcode, stateName } from '../../malaysia';
 
 interface Customer {
   id: string;
@@ -810,6 +810,7 @@ const AddressEditForm: React.FC<{ customerId: string; address: Address; canChoos
             {state ? stateName(state) : 'Filled in from the postcode'}
           </p>
           {f.postcode.length === 5 && !state && <p role="alert" className="text-xs text-[#a33a3a]">Postcode not recognised.</p>}
+          {state && !deliversTo(state) && <p role="alert" className="text-xs text-[#a33a3a]">{WEST_ONLY_MESSAGE}</p>}
         </div>
         <div className="sm:col-span-2">{field('note', 'Delivery note (optional)', { maxLength: 200, placeholder: 'e.g. guardhouse, call on arrival' })}</div>
       </div>

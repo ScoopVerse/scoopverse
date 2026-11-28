@@ -8,6 +8,7 @@ import { authRouter } from './auth';
 import { adminRouter } from './admin';
 import { cartRouter } from './cart';
 import { addressesRouter } from './addresses';
+import { easyparcelCallbackRouter } from './easyparcel';
 import { productsPublicRouter, PRODUCT_DIR } from './products';
 
 const isProd = process.env.NODE_ENV === 'production';
@@ -76,6 +77,7 @@ app.use('/api/auth', authRouter);
 app.use('/api/products', productsPublicRouter);
 app.use('/api/cart', cartRouter);
 app.use('/api/addresses', addressesRouter);
+app.use('/api/easyparcel', easyparcelCallbackRouter);
 app.use('/api', (_req, res) => res.status(404).json({ error: 'Not found' }));
 
 if (isProd) {

@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { MapPin, X } from 'lucide-react';
 import type { Address } from '../types';
-import { nationalPhone, stateForPostcode, stateName } from '../malaysia';
+import { WEST_ONLY_MESSAGE, deliversTo, nationalPhone, stateForPostcode, stateName } from '../malaysia';
 
 const MAX_ADDRESSES = 5; // must match server/addresses.ts
 
@@ -159,6 +159,7 @@ export const AddressDrawer: React.FC<{ onClose: () => void }> = ({ onClose }) =>
                   {state ? stateName(state) : 'Filled in from your postcode'}
                 </p>
                 {f.postcode.length === 5 && !state && <p role="alert" className="text-sm text-error">We don’t recognise this postcode. Please check it.</p>}
+                {state && !deliversTo(state) && <p role="alert" className="text-sm text-error">{WEST_ONLY_MESSAGE}</p>}
               </div>
               <label className="block space-y-1">
                 <span className={label}>Delivery note (optional)</span>

@@ -4,6 +4,8 @@ import type { Admin } from '../../types';
 import { CustomersTab } from './CustomersTab';
 import { ProductsTab } from './ProductsTab';
 import { LiveTab } from './LiveTab';
+import { EasyParcelCard } from './EasyParcelCard';
+import { ShippingSettingsCard } from './ShippingSettingsCard';
 
 const TABS = [
   { id: 'overview', label: 'Overview', icon: LayoutDashboard },
@@ -116,6 +118,8 @@ export const AdminDashboard: React.FC<Props> = ({ admin, onLogout }) => {
                 </a>
               ))}
             </div>
+            <EasyParcelCard onSessionExpired={onLogout} />
+            <ShippingSettingsCard onSessionExpired={onLogout} />
           </>
         ) : tab === 'customers' ? (
           <CustomersTab onSessionExpired={onLogout} />

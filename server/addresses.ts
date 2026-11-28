@@ -1,6 +1,6 @@
 import { Router, type Request, type Response, type NextFunction } from 'express';
 import { pool } from './db';
-import { stateForPostcode } from '../src/malaysia';
+import { WEST_ONLY_MESSAGE, deliversTo, stateForPostcode } from '../src/malaysia';
 
 // The signed-in customer's saved delivery addresses (mounted at /api/addresses). Malaysia only.
 
@@ -27,7 +27,7 @@ export async function listOf(userId: string) {
 }
 
 // "012-345 6789", "+6012 3456789" and "60123456789" all become "+60123456789". Mobile (01x) or landline (03 to 09) only.
-function malaysianPhone(raw: string): string | null {
+export function malaysianPhone(raw: string): string | null {
   let d = raw.replace(/[\s\-()]/g, '');
   if (d.startsWith('+')) d = d.slice(1);
   if (!/^\d+$/.test(d)) return null;
@@ -58,6 +58,7 @@ function clean(body: Record<string, unknown>): { error: string } | { name: strin
   if (!/^\d{5}$/.test(postcode)) return { error: 'The postcode must be 5 digits.' };
   const state = stateForPostcode(postcode);
   if (!state) return { error: `We don't recognise ${postcode} as a Malaysian postcode. Please check it.` };
+  if (!deliversTo(state)) return { error: WEST_ONLY_MESSAGE };
   return { name, phone, line1, line2, city, postcode, state, note };
 }
 

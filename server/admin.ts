@@ -5,6 +5,8 @@ import { pool } from './db';
 import { dummyHash, verifyPassword } from './passwords';
 import { EMAIL_RE, limiter, sendPasswordResetTo } from './auth';
 import { productsAdminRouter } from './products';
+import { easyparcelAdminRouter } from './easyparcel';
+import { shippingAdminRouter } from './shipping';
 import { shape as addressShape, listOf as listAddresses, updateAddress, type Row as AddressRow } from './addresses';
 
 declare module 'express-session' {
@@ -100,6 +102,8 @@ adminRouter.get('/me', (_req, res) => {
 });
 
 adminRouter.use('/products', productsAdminRouter);
+adminRouter.use('/easyparcel', easyparcelAdminRouter);
+adminRouter.use('/shipping', shippingAdminRouter);
 
 // --- Customers ---
 

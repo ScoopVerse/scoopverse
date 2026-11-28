@@ -20,6 +20,11 @@ export const STATES: { code: string; name: string }[] = [
 
 export const stateName = (code: string) => STATES.find((s) => s.code === code)?.name ?? code;
 
+// Delivery is West Malaysia only for now: Sabah, Sarawak and Labuan are left out. Take a code out of this list to open it.
+const EAST_MALAYSIA = ['MY-12', 'MY-13', 'MY-15'];
+export const deliversTo = (state: string) => !EAST_MALAYSIA.includes(state);
+export const WEST_ONLY_MESSAGE = 'Sorry, we only deliver to West Malaysia for now.';
+
 // The state a postcode belongs to. The customer can't choose a state: the form shows this one and the server saves it.
 // shortcut: these ranges are written from memory of Pos Malaysia's list, so a few border towns may be off, and a real
 // postcode outside them is refused as "not recognised". Fix: load the official postcode list once that shows up.
