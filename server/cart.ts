@@ -135,6 +135,9 @@ cartRouter.patch('/:id', async (req, res) => {
     'SELECT COALESCE(SUM(quantity), 0) AS n FROM cart_items WHERE user_id = $1 AND product_id = $2 AND id <> $3',
     [userId, line.rows[0].product_id, req.params.id],
   );
+  // shortcut: this also blocks LOWERING a line while the cart is over stock (stock 10, live 10 + offline 10: neither
+  // line can go down, the customer must remove one). Fix: always allow a quantity at or below the current one, and
+  // in the cart drawer pre-fill the fix ("only 10 left, lower to fit"). Not urgent; checkout is blocked, nothing sells wrongly.
   if (Number(others.rows[0].n) + quantity > line.rows[0].stock) {
     return res.status(409).json({ error: line.rows[0].stock > 0 ? `Only ${line.rows[0].stock} available.` : 'Sorry, this is sold out.' });
   }
