@@ -11,6 +11,7 @@ import { SiteFooter } from './SiteFooter';
 import { ProductTile } from './ProductTile';
 import { FramedImage } from './FramedImage';
 import { CartDrawer } from './CartDrawer';
+import { AddressDrawer } from './AddressDrawer';
 import { LegendBeads, LegendModal } from './Legend';
 
 type Filter = 'all' | 'perfume' | 'scoop' | 'other';
@@ -37,6 +38,7 @@ export const ShopPage: React.FC = () => {
   const [openId, setOpenId] = useState<string | null>(hashId);
   const live = useLive();
   const cart = useCart(user);
+  const [addressesOpen, setAddressesOpen] = useState(false);
   // An "Add to cart" pressed while logged out waits here, and goes through once the customer has logged in.
   const pendingAdd = useRef<{ productId: string; mode: string; quantity: number; from?: Fly } | null>(null);
   // A picture flying from "Add to cart" to the cart button; the badge count waits (holdCount) until it lands.
@@ -116,7 +118,7 @@ export const ShopPage: React.FC = () => {
 
   return (
     <div className="site min-h-screen selection:bg-accent/20">
-      <SiteNav user={user} onLogin={() => setAuthOpen(true)} onLogout={logout} current="shop" onCart={() => (user ? cart.setOpen(true) : setAuthOpen(true))} cartCount={holdCount ?? cart.cart?.count} />
+      <SiteNav user={user} onLogin={() => setAuthOpen(true)} onLogout={logout} current="shop" onCart={() => (user ? cart.setOpen(true) : setAuthOpen(true))} cartCount={holdCount ?? cart.cart?.count} onAddresses={() => setAddressesOpen(true)} />
 
       <main>
         <div className="page-wrap grid items-end gap-x-16 gap-y-4 pb-10 pt-12 lg:grid-cols-12">
@@ -236,6 +238,7 @@ export const ShopPage: React.FC = () => {
       {openProduct && <ProductDetail product={openProduct} onClose={close} live={live} onAdd={addToCart} />}
       {fly && <FlyingPicture {...fly} onDone={() => { setFly(null); setHoldCount(null); }} />}
       {cart.open && <CartDrawer cart={cart.cart} onClose={() => cart.setOpen(false)} onQuantity={cart.setQuantity} onRemove={cart.remove} />}
+      {addressesOpen && user && <AddressDrawer onClose={() => setAddressesOpen(false)} />}
       <AuthModal
         open={authOpen}
         onClose={() => {

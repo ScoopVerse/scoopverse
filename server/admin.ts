@@ -5,6 +5,7 @@ import { pool } from './db';
 import { dummyHash, verifyPassword } from './passwords';
 import { EMAIL_RE, limiter, sendPasswordResetTo } from './auth';
 import { productsAdminRouter } from './products';
+import { shape as addressShape, listOf as listAddresses, updateAddress, type Row as AddressRow } from './addresses';
 
 declare module 'express-session' {
   interface SessionData {
@@ -145,7 +146,13 @@ adminRouter.get('/customers', async (req, res) => {
     ),
     pool.query<{ total: string }>(`SELECT count(*) AS total FROM users ${where}`, params),
   ]);
-  res.json({ customers: list.rows.map(publicCustomer), total: Number(count.rows[0].total), pageSize: CUSTOMERS_PAGE_SIZE });
+  // Their saved addresses, one query for the whole page (default first).
+  const addresses = await pool.query<AddressRow & { user_id: string }>(
+    'SELECT * FROM addresses WHERE user_id = ANY($1::bigint[]) ORDER BY is_default DESC, created_at, id',
+    [list.rows.map((c) => c.id)],
+  );
+  const customers = list.rows.map((c) => ({ ...publicCustomer(c), addresses: addresses.rows.filter((a) => a.user_id === c.id).map(addressShape) }));
+  res.json({ customers, total: Number(count.rows[0].total), pageSize: CUSTOMERS_PAGE_SIZE });
 });
 
 adminRouter.patch('/customers/:id', async (req, res) => {
@@ -197,6 +204,15 @@ adminRouter.patch('/customers/:id', async (req, res) => {
 });
 
 // Permanently deletes the account (its tokens go with it via ON DELETE CASCADE) and logs it out.
+// Edit one of a customer's saved addresses (same checks as when the customer edits it). Returns all their addresses.
+adminRouter.put('/customers/:id/addresses/:addressId', async (req, res) => {
+  const addressId = String(req.params.addressId);
+  if (!/^\d{1,18}$/.test(addressId)) return res.status(404).json({ error: 'That address was not found.' });
+  const bad = await updateAddress(req.params.id, addressId, req.body ?? {});
+  if (bad) return res.status(bad.status).json({ error: bad.error });
+  res.json({ addresses: await listAddresses(req.params.id) });
+});
+
 adminRouter.delete('/customers/:id', async (req, res) => {
   const client = await pool.connect();
   try {

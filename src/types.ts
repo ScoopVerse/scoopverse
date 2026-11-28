@@ -110,6 +110,19 @@ export interface Cart {
   canCheckout: boolean;
 }
 
+export interface Address {
+  id: string;
+  name: string;
+  phone: string;
+  line1: string;
+  line2: string;
+  city: string;
+  postcode: string;
+  state: string;
+  note: string;
+  isDefault: boolean;
+}
+
 export interface ScentNote {
   id: string;
   name: string;

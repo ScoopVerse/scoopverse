@@ -1,5 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { BadgeCheck, BookUser, Check, ChevronDown, ChevronLeft, ChevronRight, KeyRound, Pencil, Phone, Search, Trash2, UserRound, X } from 'lucide-react';
+import type { Address } from '../../types';
+import { nationalPhone, stateForPostcode, stateName } from '../../malaysia';
 
 interface Customer {
   id: string;
@@ -7,6 +9,7 @@ interface Customer {
   email: string;
   joinedAt: string;
   emailVerified: boolean;
+  addresses: Address[]; // default first; not sent back when the customer is edited
 }
 
 interface Props {
@@ -289,9 +292,10 @@ export const CustomersTab: React.FC<Props> = ({ onSessionExpired }) => {
               onEdit={() => setEditingId(c.id)}
               onCancelEdit={() => setEditingId(null)}
               onSaved={(updated) => {
-                replaceCustomer(updated);
+                replaceCustomer({ ...updated, addresses: c.addresses });
                 setEditingId(null);
               }}
+              onAddresses={(addresses) => replaceCustomer({ ...c, addresses })}
               onDelete={() => setDeleting(c)}
               onSessionExpired={onSessionExpired}
             />
@@ -399,11 +403,12 @@ interface RowProps {
   onEdit: () => void;
   onCancelEdit: () => void;
   onSaved: (c: Customer) => void;
+  onAddresses: (list: Address[]) => void;
   onDelete: () => void;
   onSessionExpired: () => void;
 }
 
-const CustomerRow: React.FC<RowProps> = ({ customer: c, open, editing, selected, onToggleSelected, onToggle, onEdit, onCancelEdit, onSaved, onDelete, onSessionExpired }) => {
+const CustomerRow: React.FC<RowProps> = ({ customer: c, open, editing, selected, onToggleSelected, onToggle, onEdit, onCancelEdit, onSaved, onAddresses, onDelete, onSessionExpired }) => {
   const panelId = `customer-${c.id}`;
   return (
     <li className={selected ? 'bg-[#f6effc]' : open ? 'bg-[#fdfbff]' : ''}>
@@ -451,13 +456,16 @@ const CustomerRow: React.FC<RowProps> = ({ customer: c, open, editing, selected,
             <div className="space-y-4">
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 <DetailCard icon={Phone} title="Phone Number">
-                  <p className="text-sm text-[#7b757e]">No phone number yet</p>
-                  <p className="text-xs text-[#7b757e]/80">Taken from the first address in the address book.</p>
+                  {c.addresses[0] ? (
+                    <>
+                      <p className="num text-sm text-[#4a454e]">{nationalPhone(c.addresses[0].phone)}</p>
+                      <p className="text-xs text-[#7b757e]/80">Taken from the default address in the address book.</p>
+                    </>
+                  ) : (
+                    <p className="text-sm text-[#7b757e]">No phone number yet</p>
+                  )}
                 </DetailCard>
-                <DetailCard icon={BookUser} title="Address Book">
-                  <p className="text-sm text-[#7b757e]">No addresses yet</p>
-                  <p className="text-xs text-[#7b757e]/80">Address book coming soon.</p>
-                </DetailCard>
+                <AddressBookCard customerId={c.id} addresses={c.addresses} onChange={onAddresses} onSessionExpired={onSessionExpired} />
                 <DetailCard icon={UserRound} title="Account">
                   <p className="text-sm text-[#4a454e]">Joined {formatDate(c.joinedAt)}</p>
                   <span
@@ -684,8 +692,152 @@ const BatchResetDialog: React.FC<BatchProps<string>> = ({ customers, onClose, on
   );
 };
 
-const DetailCard: React.FC<{ icon: React.ElementType; title: string; children: React.ReactNode }> = ({ icon: Icon, title, children }) => (
-  <div className="rounded-2xl bg-white border border-[#efe7f5] p-4 space-y-1.5">
+// Shows the default address only; "Show N more" widens the card across the row with the addresses side by side.
+const AddressBookCard: React.FC<{ customerId: string; addresses: Address[]; onChange: (list: Address[]) => void; onSessionExpired: () => void }> = ({ customerId, addresses, onChange, onSessionExpired }) => {
+  const [all, setAll] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const wide = all || editingId !== null;
+  const shown = all ? addresses : addresses.slice(0, 1);
+  return (
+    <DetailCard icon={BookUser} title="Address Book" className={wide ? 'sm:col-span-2 lg:col-span-3' : ''}>
+      {addresses.length === 0 ? (
+        <p className="text-sm text-[#7b757e]">No addresses yet</p>
+      ) : (
+        <ul className={wide ? 'grid gap-x-6 gap-y-4 sm:grid-cols-2 lg:grid-cols-3' : ''}>
+          {shown.map((a) =>
+            editingId === a.id ? (
+              <li key={a.id} className="sm:col-span-2 lg:col-span-3">
+                <AddressEditForm
+                  customerId={customerId}
+                  address={a}
+                  canChooseDefault={!a.isDefault && addresses.length > 1}
+                  onCancel={() => setEditingId(null)}
+                  onSaved={(list) => {
+                    onChange(list);
+                    setEditingId(null);
+                  }}
+                  onSessionExpired={onSessionExpired}
+                />
+              </li>
+            ) : (
+              <li key={a.id} className="text-sm text-[#4a454e]">
+                <p className="font-bold text-[#1c1c18]">
+                  {a.name}
+                  {a.isDefault && <span className="ml-2 px-2 py-0.5 rounded-full bg-[#efdbff]/70 text-[11px] font-bold text-[#533d6b]">Default</span>}
+                </p>
+                <p className="[overflow-wrap:anywhere]">
+                  {a.line1}
+                  {a.line2 && `, ${a.line2}`}
+                  <br />
+                  {a.postcode} {a.city}, {stateName(a.state)}
+                </p>
+                <p className="num text-[#7b757e]">{nationalPhone(a.phone)}</p>
+                {a.note && <p className="text-[#7b757e] [overflow-wrap:anywhere]">Note: {a.note}</p>}
+                <button type="button" onClick={() => setEditingId(a.id)} className="mt-1 inline-flex items-center gap-1 text-sm font-bold text-[#695282] hover:text-[#533d6b]">
+                  <Pencil className="w-3.5 h-3.5" />
+                  Edit address
+                </button>
+              </li>
+            ),
+          )}
+        </ul>
+      )}
+      {addresses.length > 1 && (
+        <button type="button" onClick={() => setAll((v) => !v)} aria-expanded={all} className="text-sm font-bold text-[#695282] hover:text-[#533d6b] underline underline-offset-2">
+          {all ? 'Show less' : `Show ${addresses.length - 1} more`}
+        </button>
+      )}
+    </DetailCard>
+  );
+};
+
+// Edits one of a customer's addresses on their behalf; the server applies the same checks as in the shop.
+const AddressEditForm: React.FC<{ customerId: string; address: Address; canChooseDefault: boolean; onCancel: () => void; onSaved: (list: Address[]) => void; onSessionExpired: () => void }> = ({
+  customerId,
+  address,
+  canChooseDefault,
+  onCancel,
+  onSaved,
+  onSessionExpired,
+}) => {
+  // The state is not edited: it follows from the postcode (shown read-only, and worked out again by the server).
+  const [f, setF] = useState({ name: address.name, phone: nationalPhone(address.phone), line1: address.line1, line2: address.line2, city: address.city, postcode: address.postcode, note: address.note, isDefault: false });
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const set = (k: keyof typeof f, v: string | boolean) => setF((cur) => ({ ...cur, [k]: v }));
+  const state = stateForPostcode(f.postcode);
+  const id = (k: string) => `addr-${address.id}-${k}`;
+
+  const save = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/admin/customers/${customerId}/addresses/${address.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(f) });
+      if (res.status === 401) return onSessionExpired();
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) return setError(data.error ?? 'Something went wrong. Please try again.');
+      onSaved(data.addresses);
+    } catch {
+      setError('Could not reach the server. Please try again.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const field = (k: 'name' | 'phone' | 'line1' | 'line2' | 'city' | 'note', label: string, extra: React.InputHTMLAttributes<HTMLInputElement> = {}) => (
+    <div className="space-y-1.5">
+      <label htmlFor={id(k)} className={labelClass}>{label}</label>
+      <input id={id(k)} value={f[k]} onChange={(e) => set(k, e.target.value)} className={inputClass} {...extra} />
+    </div>
+  );
+
+  return (
+    <form onSubmit={save} className="rounded-2xl bg-[#fdfbff] border border-[#efe7f5] p-4 space-y-4">
+      <div className="grid gap-4 sm:grid-cols-2">
+        {field('name', 'Receiver name', { required: true, maxLength: 60 })}
+        {field('phone', 'Phone number', { required: true, maxLength: 20, inputMode: 'tel', placeholder: '012-345 6789' })}
+        {field('line1', 'Address line 1', { required: true, maxLength: 100 })}
+        {field('line2', 'Address line 2 (optional)', { maxLength: 100 })}
+        <div className="space-y-1.5">
+          <label htmlFor={id('postcode')} className={labelClass}>Postcode</label>
+          <input id={id('postcode')} value={f.postcode} onChange={(e) => set('postcode', e.target.value.replace(/\D/g, ''))} inputMode="numeric" maxLength={5} pattern="\d{5}" title="5 digits" required className={inputClass} />
+        </div>
+        {field('city', 'City or town', { required: true, maxLength: 50 })}
+        <div className="space-y-1.5">
+          <span className={labelClass} id={id('state')}>State</span>
+          <p aria-labelledby={id('state')} className={`${inputClass} bg-[#efe9f3] ${state ? 'text-[#1c1c18]' : 'text-[#7b757e]'}`}>
+            {state ? stateName(state) : 'Filled in from the postcode'}
+          </p>
+          {f.postcode.length === 5 && !state && <p role="alert" className="text-xs text-[#a33a3a]">Postcode not recognised.</p>}
+        </div>
+        <div className="sm:col-span-2">{field('note', 'Delivery note (optional)', { maxLength: 200, placeholder: 'e.g. guardhouse, call on arrival' })}</div>
+      </div>
+      {canChooseDefault && (
+        <label className="flex items-center gap-2 text-sm text-[#4a454e] cursor-pointer">
+          <input type="checkbox" checked={f.isDefault} onChange={(e) => set('isDefault', e.target.checked)} className={checkboxClass} />
+          Make this the default address
+        </label>
+      )}
+      {error && (
+        <p role="alert" className="text-sm text-[#a33a3a] bg-[#fbeaea] border border-[#f1cccc] rounded-xl px-4 py-2.5">
+          {error}
+        </p>
+      )}
+      <div className="flex flex-wrap gap-2 justify-end">
+        <button type="button" onClick={onCancel} className="text-sm font-bold text-[#7b757e] hover:text-[#4a454e] px-4 py-2 rounded-full">
+          Cancel
+        </button>
+        <button type="submit" disabled={busy} className="text-sm font-bold text-white bg-[#695282] hover:bg-[#533d6b] disabled:opacity-60 px-5 py-2 rounded-full shadow-sm transition-all">
+          {busy ? 'Saving…' : 'Save address'}
+        </button>
+      </div>
+    </form>
+  );
+};
+
+const DetailCard: React.FC<{ icon: React.ElementType; title: string; className?: string; children: React.ReactNode }> = ({ icon: Icon, title, className = '', children }) => (
+  <div className={`rounded-2xl bg-white border border-[#efe7f5] p-4 space-y-1.5 ${className}`}>
     <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-[#695282]">
       <Icon className="w-4 h-4" />
       {title}

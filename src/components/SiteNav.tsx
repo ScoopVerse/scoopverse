@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { ShoppingBag } from 'lucide-react';
+import { MapPin, ShoppingBag } from 'lucide-react';
 import type { User } from '../types';
 import logoImg from '../assets/images/regenerated_image_1785774461998.png';
 
@@ -12,10 +12,12 @@ interface Props {
   // Shop only: the cart button and how many items are in it.
   onCart?: () => void;
   cartCount?: number;
+  // Shop only: opens the saved addresses (shown to logged-in customers).
+  onAddresses?: () => void;
 }
 
 // The top bar of the storefront (Home and Shop): the logo, the Shop link and the account.
-export const SiteNav: React.FC<Props> = ({ user, onLogin, onLogout, current, onCart, cartCount }) => {
+export const SiteNav: React.FC<Props> = ({ user, onLogin, onLogout, current, onCart, cartCount, onAddresses }) => {
   // The cart button pops a little whenever its count goes up (skipped with reduced motion).
   const cartRef = useRef<HTMLButtonElement>(null);
   const lastCount = useRef(cartCount ?? 0);
@@ -47,6 +49,11 @@ export const SiteNav: React.FC<Props> = ({ user, onLogin, onLogout, current, onC
             {cartCount ? (
               <span className="num absolute right-0 top-0 grid h-5 min-w-5 place-items-center rounded-full bg-accent px-1 text-xs font-semibold text-accent-ink">{cartCount}</span>
             ) : null}
+          </button>
+        )}
+        {user && onAddresses && (
+          <button type="button" onClick={onAddresses} aria-label="Your addresses" className="inline-flex h-11 w-11 items-center justify-center rounded-full text-ink-2 transition-colors hover:text-accent">
+            <MapPin className="h-5 w-5" aria-hidden />
           </button>
         )}
         {user ? (

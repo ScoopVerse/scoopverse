@@ -110,6 +110,23 @@ export async function migrate() {
       created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
       UNIQUE (user_id, product_id, mode)
     );
+    -- A customer's saved delivery addresses (Malaysia only). state is ISO 3166-2:MY (MY-01 to MY-16); phone is +60 form.
+    CREATE TABLE IF NOT EXISTS addresses (
+      id         BIGSERIAL PRIMARY KEY,
+      user_id    BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      name       TEXT NOT NULL,
+      phone      TEXT NOT NULL,
+      line1      TEXT NOT NULL,
+      line2      TEXT NOT NULL DEFAULT '',
+      city       TEXT NOT NULL,
+      postcode   TEXT NOT NULL CHECK (postcode ~ '^[0-9]{5}$'),
+      state      TEXT NOT NULL,
+      is_default BOOLEAN NOT NULL DEFAULT false,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS addresses_one_default ON addresses (user_id) WHERE is_default;
+    -- Optional note for the courier ("guardhouse, call on arrival").
+    ALTER TABLE addresses ADD COLUMN IF NOT EXISTS note TEXT NOT NULL DEFAULT '';
     -- Descriptions used to be plain text; they are now formatted text (HTML). Convert the old ones once:
     -- escape what HTML treats specially, drop carriage returns, turn line breaks into <br>.
     UPDATE products SET description = '<p>' || replace(replace(replace(replace(replace(trim(description),

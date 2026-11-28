@@ -100,6 +100,17 @@ share its stock). A line the shop can't sell as it stands (hidden, sold out, not
 flagged with a `problem`, left out of the subtotal, and `canCheckout` turns false. Checkout itself comes in the
 orders phase. The cart button is on `/shop` only for now.
 
+## Address book
+
+A logged-in customer can save up to 5 delivery addresses (`addresses`), one marked default (the first is default
+automatically; deleting the default passes it to the oldest left). Malaysia only: the state is one of 16 ISO 3166-2:MY
+codes (`MY-01`…`MY-16`, names in `src/malaysia.ts`), the postcode is 5 digits and the phone is stored as `+60…`
+(mobile or landline; `012-345 6789`, `+60 12 3456789` and `60123456789` are all accepted). It opens from the pin icon
+in the `/shop` top bar. The state is never chosen: it follows from the postcode (list in `src/malaysia.ts`). The form shows it
+read-only and the server works it out again, ignoring any state sent; a postcode not on the list is refused. An optional
+delivery note (up to 200 letters) goes to the courier. Address autocomplete is logged as a `shortcut:` debt in `server/addresses.ts`. The admin sees each customer's addresses (and the default's phone number) on their card in the
+Customers tab, and can edit them there (same checks as in the shop). These fields are what EasyParcel's order and quote calls ask for.
+
 ## API
 
 | Method | Path                 | Body                        |
@@ -134,6 +145,11 @@ orders phase. The cart button is on `/shop` only for now.
 | POST   | `/api/cart` | customer: `{ productId, mode, quantity? }` adds (or raises the line); `mode` = `live`, `offline` (scoops) or `standard` → the cart |
 | PATCH  | `/api/cart/:id` | customer: `{ quantity }` (1–10) sets one line → the cart |
 | DELETE | `/api/cart/:id` | customer: removes one line → the cart |
+| GET    | `/api/addresses` | customer: `{ addresses }`, default first (401 when logged out) |
+| POST   | `/api/addresses` | customer: `{ name, phone, line1, line2?, city, postcode, state, isDefault? }` (max 5) → `{ addresses }` |
+| PUT    | `/api/addresses/:id` | customer: same body, edits one address → `{ addresses }` |
+| PUT    | `/api/admin/customers/:id/addresses/:addressId` | admin: same body as above, edits one of that customer's addresses → `{ addresses }` |
+| DELETE | `/api/addresses/:id` | customer: removes one address → `{ addresses }` |
 | POST   | `/api/admin/customers/batch-delete` | `{ ids }` (1–50) → `{ deleted }` |
 | POST   | `/api/admin/customers/batch-reset` | `{ ids }` (1–20) → `{ sent, failed }`; 10 requests per 15 min |
 
